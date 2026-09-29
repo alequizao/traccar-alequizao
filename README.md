@@ -40,7 +40,7 @@ Isso facilita acompanhar cada nova versão oficial sem perder nada.
 | ⚙️ **`.env` em tempo de execução** | A web lê `/.env` antes de abrir. Hoje só há `SUPPORT_URL`, e dá para trocar o número sem recompilar. | `web/src/common/util/env.js`, `web/src/index.jsx` |
 | 👨‍💻 **Dados do desenvolvedor** | Em *Preferências › Informação*: WhatsApp, e-mail, Instagram e site, com links clicáveis. | `web/src/settings/PreferencesPage.jsx` |
 | 🎨 **Identidade visual** | Logos, favicon, ícones do PWA, `custom.css`/`custom.js`. | `personalizacoes/web/` |
-| 🧭 **Central de Comandos** | Página `/comandos.html` com abas Enviar, Histórico e Fila, e comandos prontos para os rastreadores mais comuns. | `personalizacoes/web/comandos.html` |
+| 🧭 **Central de Comandos** | Página `/comandos.html` com abas Enviar, Histórico e Fila, e comandos prontos para os rastreadores mais comuns. A aba Fila lê `tc_commands_queue` por uma ponte PHP (o domínio vai pelo túnel da Cloudflare direto no Traccar, que não roda PHP); a ponte exige token de sessão de administrador. | `personalizacoes/web/comandos.html`, `servidor/alequizao.com/traccar-fila/` |
 | 🔎 **SEO** | Bloco JSON-LD (Organization) no `index.html`. | `personalizacoes/seo-jsonld.html` |
 | 📴 **Service worker** | O PWA não põe `/comandos*` em cache. | `personalizacoes/sw-comandos-bypass.js` |
 

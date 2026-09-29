@@ -347,6 +347,9 @@ async function carregaFila(){
     let r = await fetch(url);
     if(!r.ok && location.port === "8082")
       r = await fetch(location.protocol+"//"+location.hostname+"/comandos-fila.php?token="+encodeURIComponent(tk));
+    /* monitoramento.top vai pelo túnel direto no Traccar (sem PHP): usa a ponte no alequizao.com */
+    if(!r.ok)
+      r = await fetch("https://alequizao.com/traccar-fila/?token="+encodeURIComponent(tk), {cache:"no-store"});
     if(!r.ok) throw 0;
     const fila = await r.json();
     $("filaTotal").textContent = fila.length + " comando(s) na fila";
@@ -354,7 +357,7 @@ async function carregaFila(){
       `<tr><td>${f.device||("id "+f.deviceid)}</td><td class="resp">${f.data||f.type}</td></tr>`).join("")
       : '<tr><td colspan="2" class="center">Fila vazia — tudo entregue. ✅</td></tr>';
   }catch(e){
-    $("filaBody").innerHTML = '<tr><td colspan="2" class="center">Não consegui ler a fila por aqui.<br>Abra pela URL <b>https://nova.monitoramento.top/comandos.html</b></td></tr>';
+    $("filaBody").innerHTML = '<tr><td colspan="2" class="center">Não consegui ler a fila agora. Tente de novo em instantes.</td></tr>';
   }
 }
 
