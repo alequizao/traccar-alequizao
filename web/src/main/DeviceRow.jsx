@@ -16,9 +16,11 @@ import BatteryCharging60Icon from '@mui/icons-material/BatteryCharging60';
 import Battery20Icon from '@mui/icons-material/Battery20';
 import BatteryCharging20Icon from '@mui/icons-material/BatteryCharging20';
 import ErrorIcon from '@mui/icons-material/Error';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { devicesActions } from '../store';
+import { devicesActions, errorsActions } from '../store';
 import {
   formatAlarm,
   formatBoolean,
@@ -28,7 +30,8 @@ import {
 } from '../common/util/formatter';
 import { useTranslation } from '../common/components/LocalizationProvider';
 import { mapIconKey, mapIcons } from '../map/core/preloadImages';
-import { useAdministrator } from '../common/util/permissions';
+import { useAdministrator, useRestriction } from '../common/util/permissions';
+import fetchOrThrow from '../common/util/fetchOrThrow';
 import EngineIcon from '../resources/images/data/engine.svg?react';
 import { useAttributePreference } from '../common/util/preferences';
 import GeofencesValue from '../common/components/GeofencesValue';
@@ -75,6 +78,39 @@ const DeviceRow = ({ devices, index, style }) => {
 
   const item = devices[index];
   const position = useSelector((state) => state.session.positions[item.id]);
+
+  const limitCommands = useRestriction('limitCommands');
+  const locked = item?.attributes?.uiLocked === true || item?.attributes?.uiLocked === 'true';
+
+  const handleLock = async (event) => {
+    event.stopPropagation();
+    if (limitCommands) return;
+    const lock = !locked;
+    try {
+      await fetchOrThrow('/api/commands/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: lock ? 'engineStop' : 'engineResume',
+          deviceId: item.id,
+        }),
+      });
+      const updatedDevice = { ...item, attributes: { ...item.attributes, uiLocked: lock } };
+      try {
+        await fetchOrThrow(`/api/devices/${item.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedDevice),
+        });
+      } catch {
+        // o comando já foi enviado; o estado visual segue mesmo sem salvar no dispositivo
+      }
+      window.localStorage.setItem(`deviceLock:${item.id}`, lock ? 'true' : 'false');
+      dispatch(devicesActions.update([updatedDevice]));
+    } catch (error) {
+      dispatch(errorsActions.push(error.message));
+    }
+  };
 
   const devicePrimary = useAttributePreference('devicePrimary', 'name');
   const deviceSecondary = useAttributePreference('deviceSecondary', '');
@@ -143,6 +179,15 @@ const DeviceRow = ({ devices, index, style }) => {
             secondary: { noWrap: true },
           }}
         />
+        <Tooltip title={t(locked ? 'alarmUnlock' : 'alarmLock')}>
+          <IconButton size="small" onClick={handleLock} disabled={limitCommands}>
+            {locked ? (
+              <LockIcon fontSize="small" className={classes.error} />
+            ) : (
+              <LockOpenIcon fontSize="small" className={classes.success} />
+            )}
+          </IconButton>
+        </Tooltip>
         {position && (
           <>
             {position.attributes.hasOwnProperty('alarm') && (

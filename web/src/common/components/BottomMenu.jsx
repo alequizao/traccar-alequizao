@@ -16,11 +16,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import MapIcon from '@mui/icons-material/Map';
 import PersonIcon from '@mui/icons-material/Person';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 
 import { sessionActions } from '../../store';
 import { useTranslation } from './LocalizationProvider';
 import { useRestriction } from '../util/permissions';
 import { nativePostMessage } from './NativeInterface';
+import { getEnv } from '../util/env';
 
 const BottomMenu = () => {
   const navigate = useNavigate();
@@ -111,6 +113,9 @@ const BottomMenu = () => {
         }
         break;
       }
+      case 'support':
+        window.open(getEnv('SUPPORT_URL'), '_blank', 'noopener');
+        break;
       case 'settings':
         navigate('/settings/preferences?menu=true');
         break;
@@ -151,6 +156,11 @@ const BottomMenu = () => {
             value="settings"
           />
         )}
+        <BottomNavigationAction
+          label={t('settingsSupport')}
+          icon={<WhatsAppIcon />}
+          value="support"
+        />
         {readonly ? (
           <BottomNavigationAction
             label={t('loginLogout')}

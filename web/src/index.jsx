@@ -11,27 +11,30 @@ import NativeInterface from './common/components/NativeInterface';
 import ServerProvider from './ServerProvider';
 import ErrorBoundary from './ErrorBoundary';
 import AppThemeProvider from './AppThemeProvider';
+import { loadEnv } from './common/util/env';
 
 preloadImages();
 
-const root = createRoot(document.getElementById('root'));
-root.render(
-  <ErrorBoundary>
-    <Provider store={store}>
-      <LocalizationProvider>
-        <StyledEngineProvider injectFirst>
-          <AppThemeProvider>
-            <CssBaseline />
-            <ServerProvider>
-              <BrowserRouter>
-                <Navigation />
-              </BrowserRouter>
-              <ErrorHandler />
-              <NativeInterface />
-            </ServerProvider>
-          </AppThemeProvider>
-        </StyledEngineProvider>
-      </LocalizationProvider>
-    </Provider>
-  </ErrorBoundary>,
-);
+loadEnv().finally(() => {
+  const root = createRoot(document.getElementById('root'));
+  root.render(
+    <ErrorBoundary>
+      <Provider store={store}>
+        <LocalizationProvider>
+          <StyledEngineProvider injectFirst>
+            <AppThemeProvider>
+              <CssBaseline />
+              <ServerProvider>
+                <BrowserRouter>
+                  <Navigation />
+                </BrowserRouter>
+                <ErrorHandler />
+                <NativeInterface />
+              </ServerProvider>
+            </AppThemeProvider>
+          </StyledEngineProvider>
+        </LocalizationProvider>
+      </Provider>
+    </ErrorBoundary>,
+  );
+});

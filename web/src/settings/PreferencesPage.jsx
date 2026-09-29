@@ -22,6 +22,8 @@ import {
   TextField,
   createFilterOptions,
   Button,
+  Link,
+  Divider,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CachedIcon from '@mui/icons-material/Cached';
@@ -415,6 +417,32 @@ const PreferencesPage = () => {
                   label={t('settingsConnection')}
                   disabled
                 />
+                <Divider />
+                <Typography variant="subtitle2">Desenvolvedor</Typography>
+                <Typography variant="body2">Alequizão (Alex Junior Calado)</Typography>
+                <Typography variant="body2">
+                  WhatsApp:{' '}
+                  <Link href="https://wa.me/5582988717072" target="_blank" rel="noopener">
+                    (82) 98871-7072
+                  </Link>
+                </Typography>
+                <Typography variant="body2">
+                  E-mail:{' '}
+                  <Link href="mailto:alexjuniorcalado@gmail.com">alexjuniorcalado@gmail.com</Link>
+                </Typography>
+                <Typography variant="body2">
+                  Instagram:{' '}
+                  <Link href="https://instagram.com/alequizao" target="_blank" rel="noopener">
+                    @alequizao
+                  </Link>
+                </Typography>
+                <Typography variant="body2">
+                  Site:{' '}
+                  <Link href="https://alequizao.com/" target="_blank" rel="noopener">
+                    alequizao.com
+                  </Link>
+                </Typography>
+                <Divider />
                 <Button variant="outlined" color="primary" onClick={() => navigate('/emulator')}>
                   {t('sharedEmulator')}
                 </Button>

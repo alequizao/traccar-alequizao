@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Central de Comandos</title>
+<style>
+:root{--azul:#2563EB;--azul-esc:#1d4ed8;--fundo:#f3f4f6;--card:#fff;--borda:#e5e7eb;--texto:#111827;--cinza:#6b7280;--verde:#16a34a;--amarelo:#d97706;--verm:#dc2626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--fundo);color:var(--texto);font-size:14px;padding-bottom:40px}
+header{background:var(--azul);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+header h1{font-size:17px;font-weight:600}
+header a{color:#dbeafe;text-decoration:none;font-size:12px}
+.wrap{max-width:900px;margin:0 auto;padding:12px}
+.tabs{display:flex;gap:6px;margin:4px 0 12px}
+.tabs button{flex:1;padding:10px 4px;border:1px solid var(--borda);background:var(--card);border-radius:10px;font-size:14px;font-weight:600;color:var(--cinza);cursor:pointer}
+.tabs button.on{background:var(--azul);border-color:var(--azul);color:#fff}
+.card{background:var(--card);border:1px solid var(--borda);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:14px;margin-bottom:12px}
+label{font-size:12px;font-weight:600;color:var(--cinza);display:block;margin-bottom:4px}
+select,input[type=text],input[type=password],input[type=email]{width:100%;padding:10px;border:1px solid var(--borda);border-radius:8px;font-size:14px;background:#fff}
+.cmdprev{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:#eff6ff;color:var(--azul-esc);border-radius:6px;padding:6px 8px;margin-top:6px;word-break:break-all}
+.filtros{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+.filtros input{flex:1;min-width:140px}
+.mini{padding:8px 10px;border:1px solid var(--borda);background:#fff;border-radius:8px;font-size:12px;font-weight:600;color:var(--cinza);cursor:pointer;white-space:nowrap}
+.mini:active{background:#eef2ff}
+.lista{max-height:340px;overflow:auto;border:1px solid var(--borda);border-radius:8px}
+.dev{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--borda);cursor:pointer}
+.dev:last-child{border-bottom:none}
+.dev input{width:16px;height:16px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.on2{background:var(--verde)}.off2{background:#9ca3af}.unk2{background:var(--amarelo)}
+.dev .nm{flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev .lu{font-size:11px;color:var(--cinza);white-space:nowrap}
+.badge{font-size:11px;font-weight:700;border-radius:20px;padding:2px 8px;white-space:nowrap}
+.b-ok{background:#dcfce7;color:var(--verde)}.b-fila{background:#fef3c7;color:var(--amarelo)}.b-err{background:#fee2e2;color:var(--verm)}.b-resp{background:#dbeafe;color:var(--azul-esc)}
+.btn{width:100%;padding:13px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px}
+.btn:disabled{background:#93c5fd}
+.btn.cinza{background:#fff;color:var(--cinza);border:1px solid var(--borda)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--cinza);font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:2px solid var(--borda);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--borda);vertical-align:top}
+td.resp{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;word-break:break-all}
+.tscroll{overflow-x:auto}
+.aviso{font-size:12px;color:var(--cinza);margin-top:8px;line-height:1.5}
+.res-item{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px dashed var(--borda);font-size:13px}
+.res-item:last-child{border-bottom:none}
+.res-item .nm{font-weight:600;min-width:120px}
+.center{text-align:center;color:var(--cinza);padding:20px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal .card{max-width:420px;width:100%;margin:0}
+.hide{display:none!important}
+.perbtns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.perbtns .mini.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+h2{font-size:15px;margin-bottom:10px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #dbeafe;border-top-color:var(--azul);border-radius:50%;animation:g .8s linear infinite;vertical-align:-2px}
+@keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ Central de Comandos</h1>
+  <a href="/">← voltar ao mapa</a>
+</header>
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="telaLogin" class="card hide">
+    <h2>Entrar</h2>
+    <label>E-mail / usuário</label>
+    <input type="text" id="lEmail" autocomplete="username">
+    <div style="height:8px"></div>
+    <label>Senha</label>
+    <input type="password" id="lSenha" autocomplete="current-password">
+    <button class="btn" onclick="fazerLogin()">Entrar</button>
+    <div id="lErro" class="aviso" style="color:var(--verm)"></div>
+  </div>
+
+  <div id="telaNegado" class="card hide center">🚫 Acesso restrito a administradores.</div>
+
+  <!-- APP -->
+  <div id="app" class="hide">
+    <div class="tabs">
+      <button id="tabEnviar" class="on" onclick="mudaTab('Enviar')">📤 Enviar</button>
+      <button id="tabHistorico" onclick="mudaTab('Historico')">📜 Histórico</button>
+      <button id="tabFila" onclick="mudaTab('Fila')">⏳ Fila</button>
+    </div>
+
+    <!-- ENVIAR -->
+    <div id="paneEnviar">
+      <div class="card">
+        <label>Comando pré-configurado</label>
+        <select id="selCmd"></select>
+        <div class="cmdprev" id="cmdPrev"></div>
+      </div>
+      <div class="card">
+        <div class="filtros">
+          <input type="text" id="busca" placeholder="🔍 Buscar veículo..." oninput="renderDevs()">
+          <button class="mini" onclick="marcar('todos')">Todos</button>
+          <button class="mini" onclick="marcar('online')">Só online</button>
+          <button class="mini" onclick="marcar('nenhum')">Limpar</button>
+        </div>
+        <div class="lista" id="listaDevs"></div>
+        <button class="btn" id="btnEnviar" onclick="confirmarEnvio()">Enviar comando</button>
+      </div>
+      <div class="card hide" id="cardRes">
+        <h2>Resultado do envio <span id="spinResp" class="spin hide"></span></h2>
+        <div id="resLista"></div>
+        <div class="aviso">✔ Enviado = aparelho online, comando entregue na hora. ⏳ Na fila = aparelho offline, recebe ao reconectar. 💬 As respostas dos aparelhos aparecem aqui automaticamente (aguardando até 3 min) e ficam no Histórico.</div>
+      </div>
+    </div>
+
+    <!-- HISTORICO -->
+    <div id="paneHistorico" class="hide">
+      <div class="card">
+        <div class="perbtns">
+          <button class="mini" data-h="1" onclick="setPeriodo(this)">1h</button>
+          <button class="mini" data-h="6" onclick="setPeriodo(this)">6h</button>
+          <button class="mini on" data-h="24" onclick="setPeriodo(this)">24h</button>
+          <button class="mini" data-h="168" onclick="setPeriodo(this)">7 dias</button>
+          <button class="mini" onclick="carregaHistorico()">🔄 Atualizar</button>
+        </div>
+        <div class="tscroll">
+        <table>
+          <thead><tr><th>Quando</th><th>Veículo</th><th>Evento</th><th>Detalhe</th></tr></thead>
+          <tbody id="histBody"><tr><td colspan="4" class="center">Carregando…</td></tr></tbody>
+        </table>
+        </div>
+        <div class="aviso">💬 <b>Resposta do aparelho</b> vem do servidor (completo, qualquer navegador). 📤 <b>Comando enviado</b> é registrado neste navegador ao usar esta página.</div>
+      </div>
+    </div>
+
+    <!-- FILA -->
+    <div id="paneFila" class="hide">
+      <div class="card">
+        <div class="perbtns"><button class="mini" onclick="carregaFila()">🔄 Atualizar fila</button><span id="filaTotal" class="aviso"></span></div>
+        <div class="tscroll">
+        <table>
+          <thead><tr><th>Veículo</th><th>Comando aguardando</th></tr></thead>
+          <tbody id="filaBody"><tr><td colspan="2" class="center">Carregando…</td></tr></tbody>
+        </table>
+        </div>
+        <div class="aviso">Comandos aguardando o aparelho reconectar. São entregues automaticamente e saem da fila.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal hide" id="modal">
+    <div class="card">
+      <h2 id="mTitulo"></h2>
+      <div id="mTexto" style="line-height:1.6;margin-bottom:6px"></div>
+      <input type="text" id="mConfirma" class="hide" placeholder='Digite SIM para confirmar'>
+      <button class="btn" id="mOk">Confirmar envio</button>
+      <button class="btn cinza" onclick="fecharModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let comandos = [], devices = [], selecionados = new Set(), horas = 24;
+const nomeDev = id => (devices.find(d => d.id === id) || {name: "id " + id}).name;
+const fmt = t => new Date(t).toLocaleString("pt-BR", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+const api = (u, o) => fetch(u, Object.assign({credentials:"include"}, o));
+
+/* ---------- sessão ---------- */
+async function init(){
+  try{
+    const r = await api("/api/session");
+    if(!r.ok) throw 0;
+    const u = await r.json();
+    if(!u.administrator){ $("telaNegado").classList.remove("hide"); return; }
+    await carregaTudo();
+  }catch(e){ $("telaLogin").classList.remove("hide"); }
+}
+async function fazerLogin(){
+  const b = new URLSearchParams({email:$("lEmail").value.trim(), password:$("lSenha").value});
+  const r = await api("/api/session", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:b});
+  if(!r.ok){ $("lErro").textContent = "Usuário ou senha incorretos."; return; }
+  const u = await r.json();
+  $("telaLogin").classList.add("hide");
+  if(!u.administrator){ $("telaNegado").classList.remove("hide"); return; }
+  await carregaTudo();
+}
+async function carregaTudo(){
+  $("app").classList.remove("hide");
+  const [rc, rd] = await Promise.all([api("/api/commands"), api("/api/devices")]);
+  comandos = (await rc.json()).sort((a,b)=>a.description.localeCompare(b.description));
+  devices  = (await rd.json()).sort((a,b)=>a.name.localeCompare(b.name));
+  $("selCmd").innerHTML = comandos.map(c=>`<option value="${c.id}">${c.description}</option>`).join("");
+  $("selCmd").onchange = mostraPrev; mostraPrev();
+  renderDevs();
+}
+function mostraPrev(){
+  const c = comandos.find(x=>x.id == $("selCmd").value);
+  $("cmdPrev").textContent = c ? (c.attributes && c.attributes.data ? "→ " + c.attributes.data : "tipo: " + c.type) : "";
+}
+
+/* ---------- dispositivos ---------- */
+function renderDevs(){
+  const q = $("busca").value.toLowerCase();
+  $("listaDevs").innerHTML = devices.filter(d=>d.name.toLowerCase().includes(q)).map(d=>{
+    const cls = d.status==="online"?"on2":(d.status==="offline"?"off2":"unk2");
+    const lu = d.lastUpdate?fmt(d.lastUpdate):"nunca";
+    return `<div class="dev" onclick="toggleDev(${d.id},event)">
+      <input type="checkbox" id="ck${d.id}" ${selecionados.has(d.id)?"checked":""}>
+      <span class="dot ${cls}"></span><span class="nm">${d.name}</span><span class="lu">${lu}</span>
+    </div>`;
+  }).join("") || '<div class="center">nenhum veículo encontrado</div>';
+  $("btnEnviar").textContent = selecionados.size ? `Enviar comando (${selecionados.size} veículo${selecionados.size>1?"s":""})` : "Enviar comando";
+}
+function toggleDev(id, ev){
+  if(ev.target.tagName!=="INPUT"){ /* clique na linha */ }
+  selecionados.has(id) ? selecionados.delete(id) : selecionados.add(id);
+  renderDevs();
+}
+function marcar(modo){
+  if(modo==="nenhum") selecionados.clear();
+  else devices.forEach(d=>{ if(modo==="todos" || d.status==="online") selecionados.add(d.id); });
+  renderDevs();
+}
+
+/* ---------- envio ---------- */
+function confirmarEnvio(){
+  if(!selecionados.size){ alert("Selecione ao menos um veículo."); return; }
+  const c = comandos.find(x=>x.id == $("selCmd").value);
+  const perigoso = /BLOQUEAR|RESET/i.test(c.description);
+  $("mTitulo").textContent = perigoso ? "⚠️ Comando sensível" : "Confirmar envio";
+  $("mTexto").innerHTML = `Comando: <b>${c.description}</b><br>Veículos: <b>${selecionados.size}</b>` +
+    (perigoso ? "<br><br>Este comando afeta o funcionamento do veículo/aparelho. Digite <b>SIM</b> para confirmar." : "");
+  $("mConfirma").value = ""; $("mConfirma").classList.toggle("hide", !perigoso);
+  $("mOk").onclick = () => {
+    if(perigoso && $("mConfirma").value.trim().toUpperCase()!=="SIM"){ $("mConfirma").style.borderColor="var(--verm)"; return; }
+    fecharModal(); enviar(c);
+  };
+  $("modal").classList.remove("hide");
+}
+function fecharModal(){ $("modal").classList.add("hide"); }
+
+async function enviar(cmd){
+  $("btnEnviar").disabled = true;
+  $("cardRes").classList.remove("hide");
+  $("resLista").innerHTML = "";
+  const alvos = [...selecionados], inicio = Date.now();
+  for(const id of alvos){
+    const linha = document.createElement("div");
+    linha.className = "res-item";
+    linha.innerHTML = `<span class="nm">${nomeDev(id)}</span><span class="badge" id="st${id}">…</span><span id="rp${id}" class="resp" style="font-size:11.5px;font-family:ui-monospace,Menlo,monospace"></span>`;
+    $("resLista").appendChild(linha);
+    let st = "error";
+    try{
+      const r = await api("/api/commands/send", {method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id: cmd.id, deviceId: id})});
+      st = r.status===200 ? "sent" : (r.status===202 ? "queued" : "error");
+    }catch(e){}
+    const el = $("st"+id);
+    if(st==="sent"){ el.textContent="✔ Enviado"; el.className="badge b-ok"; }
+    else if(st==="queued"){ el.textContent="⏳ Na fila"; el.className="badge b-fila"; }
+    else { el.textContent="✗ Erro"; el.className="badge b-err"; }
+    salvaLog({t: Date.now(), deviceId: id, device: nomeDev(id), cmd: cmd.description, data: (cmd.attributes||{}).data||cmd.type, st});
+    await new Promise(s=>setTimeout(s,150));
+  }
+  $("btnEnviar").disabled = false;
+  vigiarRespostas(alvos, inicio - 30000);
+}
+
+/* espera respostas (commandResult) por ate 3 min */
+let vigia = null;
+function vigiarRespostas(ids, desde){
+  clearInterval(vigia);
+  $("spinResp").classList.remove("hide");
+  const fim = Date.now() + 180000, vistos = new Set();
+  vigia = setInterval(async ()=>{
+    if(Date.now() > fim){ clearInterval(vigia); $("spinResp").classList.add("hide"); return; }
+    try{
+      const evs = await buscaEventos(ids, new Date(desde), new Date());
+      const posIds = evs.filter(e=>!vistos.has(e.id) && e.positionId).map(e=>e.positionId);
+      if(!posIds.length) return;
+      const poss = await buscaPosicoes(posIds);
+      evs.forEach(e=>{
+        if(vistos.has(e.id)) return;
+        const p = poss.find(p=>p.id===e.positionId);
+        const txt = p && p.attributes && p.attributes.result ? p.attributes.result : "(respondeu)";
+        const alvo = $("rp"+e.deviceId);
+        if(alvo){ alvo.textContent = "💬 " + txt; vistos.add(e.id);
+          const b = $("st"+e.deviceId); if(b){ b.textContent="✔ Respondeu"; b.className="badge b-resp"; } }
+      });
+    }catch(e){}
+  }, 6000);
+}
+
+/* ---------- historico ---------- */
+function setPeriodo(btn){
+  document.querySelectorAll(".perbtns [data-h]").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on"); horas = +btn.dataset.h; carregaHistorico();
+}
+async function buscaEventos(ids, de, ate){
+  const p = new URLSearchParams();
+  ids.forEach(i=>p.append("deviceId", i));
+  p.append("type","commandResult");
+  p.append("from", de.toISOString()); p.append("to", ate.toISOString());
+  const r = await api("/api/reports/events?"+p, {headers:{Accept:"application/json"}});
+  return r.ok ? r.json() : [];
+}
+async function buscaPosicoes(ids){
+  let out = [];
+  for(let i=0;i<ids.length;i+=50){
+    const p = new URLSearchParams(); ids.slice(i,i+50).forEach(x=>p.append("id",x));
+    const r = await api("/api/positions?"+p);
+    if(r.ok) out = out.concat(await r.json());
+  }
+  return out;
+}
+async function carregaHistorico(){
+  $("histBody").innerHTML = '<tr><td colspan="4" class="center"><span class="spin"></span> Carregando…</td></tr>';
+  const de = new Date(Date.now()-horas*3600000), ate = new Date();
+  let linhas = [];
+  try{
+    const evs = await buscaEventos(devices.map(d=>d.id), de, ate);
+    const poss = await buscaPosicoes([...new Set(evs.map(e=>e.positionId).filter(Boolean))]);
+    evs.forEach(e=>{
+      const p = poss.find(p=>p.id===e.positionId);
+      linhas.push({t:new Date(e.eventTime).getTime(), dev:nomeDev(e.deviceId),
+        tipo:'<span class="badge b-resp">💬 Resposta</span>', det:(p&&p.attributes&&p.attributes.result)||"(sem texto)"});
+    });
+  }catch(e){}
+  leLog().filter(l=>l.t>=de.getTime()).forEach(l=>{
+    const b = l.st==="sent"?'<span class="badge b-ok">📤 Enviado</span>':l.st==="queued"?'<span class="badge b-fila">📤 Na fila</span>':'<span class="badge b-err">📤 Erro</span>';
+    linhas.push({t:l.t, dev:l.device, tipo:b, det:l.cmd+" — "+l.data});
+  });
+  linhas.sort((a,b)=>b.t-a.t);
+  $("histBody").innerHTML = linhas.length ? linhas.map(l=>
+    `<tr><td>${fmt(l.t)}</td><td>${l.dev}</td><td>${l.tipo}</td><td class="resp">${l.det}</td></tr>`).join("")
+    : '<tr><td colspan="4" class="center">Nada no período.</td></tr>';
+}
+
+/* ---------- fila ---------- */
+async function carregaFila(){
+  $("filaBody").innerHTML = '<tr><td colspan="2" class="center"><span class="spin"></span> Carregando…</td></tr>';
+  try{
+    const exp = new Date(Date.now() + 7*864e5).toISOString();
+    const tk = await (await api("/api/session/token", {method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:"expiration="+encodeURIComponent(exp)})).text();
+    let url = "/comandos-fila.php?token=" + encodeURIComponent(tk);
+    let r = await fetch(url);
+    if(!r.ok && location.port === "8082")
+      r = await fetch(location.protocol+"//"+location.hostname+"/comandos-fila.php?token="+encodeURIComponent(tk));
+    if(!r.ok) throw 0;
+    const fila = await r.json();
+    $("filaTotal").textContent = fila.length + " comando(s) na fila";
+    $("filaBody").innerHTML = fila.length ? fila.map(f=>
+      `<tr><td>${f.device||("id "+f.deviceid)}</td><td class="resp">${f.data||f.type}</td></tr>`).join("")
+      : '<tr><td colspan="2" class="center">Fila vazia — tudo entregue. ✅</td></tr>';
+  }catch(e){
+    $("filaBody").innerHTML = '<tr><td colspan="2" class="center">Não consegui ler a fila por aqui.<br>Abra pela URL <b>https://nova.monitoramento.top/comandos.html</b></td></tr>';
+  }
+}
+
+/* ---------- tabs / log local ---------- */
+function mudaTab(t){
+  ["Enviar","Historico","Fila"].forEach(x=>{
+    $("pane"+x).classList.toggle("hide", x!==t);
+    $("tab"+x).classList.toggle("on", x===t);
+  });
+  if(t==="Historico") carregaHistorico();
+  if(t==="Fila") carregaFila();
+}
+function leLog(){ try{ return JSON.parse(localStorage.getItem("cc_log")||"[]"); }catch(e){ return []; } }
+function salvaLog(item){ try{ const l = leLog(); l.push(item); localStorage.setItem("cc_log", JSON.stringify(l.slice(-500))); }catch(e){} }
+
+init();
+</script>
+</body>
+</html>

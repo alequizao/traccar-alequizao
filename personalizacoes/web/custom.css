@@ -1,0 +1,295 @@
+/* Estilos personalizados para o Traccar */
+
+/* Barra de navegação inferior (#root > div[2]) - distribuir ícones com espaçamento igual */
+#root > div:nth-of-type(2) .MuiBottomNavigation-root,
+.MuiBottomNavigation-root {
+  justify-content: space-evenly !important;
+}
+
+#root > div:nth-of-type(2) .MuiBottomNavigationAction-root,
+.MuiBottomNavigationAction-root {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Ocultar os rótulos de texto, deixando apenas os ícones */
+#root > div:nth-of-type(2) .MuiBottomNavigationAction-label,
+.MuiBottomNavigationAction-label {
+  display: none !important;
+}
+
+/* Estilos para a lista de dispositivos */
+.device-list-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  position: relative;
+}
+
+.device-list-item:last-child {
+  border-bottom: none;
+}
+
+/* Cabeçalho do dispositivo com nome e status */
+.device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.device-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #000;
+  margin-right: 8px;
+  flex: 1;
+}
+
+.device-status {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.device-status.online {
+  color: #4caf50;
+}
+
+.device-status.offline {
+  color: #f44336;
+}
+
+.device-status.unknown {
+  color: #ff9800;
+}
+
+/* Endereço do dispositivo */
+.device-address {
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Detalhes do dispositivo em grid */
+.device-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.device-detail {
+  display: flex;
+  align-items: center;
+}
+
+.device-detail svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* Cores para os status */
+.status-good {
+  color: #4caf50;
+}
+
+.status-medium {
+  color: #ff9800;
+}
+
+.status-bad {
+  color: #f44336;
+}
+
+/* Estilo para o texto secundário na lista de dispositivos */
+.MuiListItemText-root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+}
+
+.MuiListItemText-primary {
+  display: none !important;
+}
+
+.MuiListItemText-secondary {
+  display: block !important;
+  width: 100% !important;
+}
+
+/* Ícone de status no canto superior direito */
+.status-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.status-indicator.online {
+  background-color: #4caf50;
+}
+
+.status-indicator.offline {
+  background-color: #f44336;
+}
+
+.status-indicator.unknown {
+  background-color: #ff9800;
+}
+
+/* Identificador do dispositivo */
+.device-id {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+/* Estilos para o cabeçalho */
+.header-info-container {
+  display: flex;
+  flex-direction: column;
+  margin-left: 10px;
+  font-size: 12px;
+}
+
+.header-address {
+  color: #e0e0e0;
+  margin-bottom: 2px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-details {
+  display: flex;
+  align-items: center;
+}
+
+.header-battery,
+.header-speed,
+.header-status {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.header-battery {
+  color: #4caf50;
+}
+
+.header-speed {
+  color: #e0e0e0;
+}
+
+.header-status {
+  color: #4caf50;
+}
+
+.header-battery svg,
+.header-speed svg,
+.header-status svg {
+  margin-right: 4px;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.device-detail svg {
+  margin-right: 4px;
+  width: 14px;
+  height: 14px;
+}
+
+/* Estilos para o ícone de bloqueio */
+.lock-button {
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lock-button:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.lock-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.lock-button.locked svg {
+  fill: #f44336;
+}
+
+.lock-button.unlocked svg {
+  fill: #4caf50;
+}
+
+/* Estilos para os indicadores */
+.battery-indicator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.battery-level {
+  display: inline-block;
+  width: 24px;
+  height: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+  position: relative;
+  margin-right: 4px;
+}
+
+.battery-level-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background-color: #4caf50;
+  border-radius: 1px;
+}
+
+.battery-level-fill.low {
+  background-color: #f44336;
+}
+
+.battery-level-fill.medium {
+  background-color: #ff9800;
+}
+
+.speed-indicator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.address-indicator {
+  display: inline-flex;
+  align-items: center;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
