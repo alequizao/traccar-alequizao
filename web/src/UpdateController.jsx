@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Snackbar, IconButton } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useSelector } from 'react-redux';
@@ -9,7 +10,7 @@ const UpdateController = () => {
   const t = useTranslation();
 
   const swUpdateInterval = useSelector(
-    (state) => state.session.server.attributes.serviceWorkerUpdateInterval || 3600000,
+    (state) => state.session.server.attributes.serviceWorkerUpdateInterval || 300000,
   );
 
   const {
@@ -42,6 +43,13 @@ const UpdateController = () => {
       }
     },
   });
+
+  // Atualização forçada: assim que há versão nova, aplica e recarrega sozinho.
+  useEffect(() => {
+    if (!needRefresh) return undefined;
+    const t = setTimeout(() => updateServiceWorker(true), 1500);
+    return () => clearTimeout(t);
+  }, [needRefresh, updateServiceWorker]);
 
   return (
     <Snackbar
