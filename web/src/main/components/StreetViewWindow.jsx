@@ -139,7 +139,7 @@ const StreetViewWindow = ({ position, nome }) => {
   const w = grande ? 560 : 320;
   const h = grande ? 380 : 220;
   const src = inicial
-    ? `https://alequizao.com/vista3d/?v=1&lat=${inicial.lat}&lon=${inicial.lon}&rumo=${inicial.curso}&nome=${encodeURIComponent(nome || '')}`
+    ? `/vista3d/index.html?v=2&lat=${inicial.lat}&lon=${inicial.lon}&rumo=${inicial.curso}&nome=${encodeURIComponent(nome || '')}`
     : null;
 
   return (

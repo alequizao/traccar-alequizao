@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Vista 3D</title>
+<link rel="stylesheet" href="maplibre-gl.css?v=1">
+<style>
+html,body,#m{margin:0;height:100%;background:#1b1f23;overflow:hidden}
+#seta{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;pointer-events:none;
+ filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+#msg{position:absolute;left:8px;top:8px;color:#fff;font:600 12px sans-serif;text-shadow:0 1px 3px #000;pointer-events:none}
+#cred{position:absolute;right:6px;bottom:3px;color:#fff;font:9px sans-serif;text-shadow:0 1px 2px #000;pointer-events:none}
+</style></head><body>
+<div id="m"></div>
+<svg id="seta" viewBox="0 0 24 24"><path d="M12 2 4 21l8-4 8 4z" fill="#FFC107" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg>
+<div id="msg"></div>
+<div id="cred">Imagens © Esri · © OpenStreetMap</div>
+<script src="maplibre-gl.js?v=1"></script>
+<script>
+// Vista 3D: câmera baixa e inclinada atrás do veículo, com satélite e prédios em 3D.
+// Sem chave de API: tiles do Esri (imagens) e do OpenFreeMap (prédios do OpenStreetMap).
+var q=new URLSearchParams(location.search);
+var lat=parseFloat(q.get('lat'))||-9.6658,lon=parseFloat(q.get('lon'))||-35.7353,rumo=parseFloat(q.get('rumo'))||0;
+document.getElementById('msg').textContent=q.get('nome')||'';
+var map=new maplibregl.Map({container:'m',center:[lon,lat],zoom:18.3,pitch:74,bearing:rumo,maxPitch:85,
+ attributionControl:false,fadeDuration:0,
+ style:{version:8,
+  sources:{
+   sat:{type:'raster',tileSize:256,maxzoom:19,attribution:'Imagens © Esri',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']},
+   osm:{type:'vector',url:'https://tiles.openfreemap.org/planet',attribution:'© OpenStreetMap'}},
+  layers:[
+   {id:'sat',type:'raster',source:'sat'},
+   {id:'pred',type:'fill-extrusion',source:'osm','source-layer':'building',minzoom:14,
+    paint:{'fill-extrusion-color':'#e9e4da','fill-extrusion-opacity':.85,
+     'fill-extrusion-height':['coalesce',['get','render_height'],6],
+     'fill-extrusion-base':['coalesce',['get','render_min_height'],0]}}]}});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+var ult=0;
+// chamado pelo app/página que embute: window.mover(lat,lon,rumo)
+window.mover=function(la,lo,ru){
+  map.easeTo({center:[lo,la],bearing:ru,duration:1200,easing:function(t){return t}});
+};
+window.addEventListener('message',function(e){var d=e.data;if(d&&d.tipo==='vista3d')window.mover(d.lat,d.lon,d.rumo)});
+map.on('load',function(){map.setPadding({top:0,bottom:0,left:0,right:0})});
+</script></body></html>
