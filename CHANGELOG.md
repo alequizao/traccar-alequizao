@@ -1,5 +1,10 @@
 # Changelog
 
+## Cobrança por notificação — 03/10/2026
+
+- `POST /api/billing/notify` (só administrador): o app RS Rastreamento envia a cobrança como notificação no celular do cliente.
+- `/api/fuel` e `/api/fuel/stations` passaram a ser públicos (dados públicos da SEFAZ).
+
 ## Combustível — 03/10/2026
 
 - ⛽ **Preço dos combustíveis por onde o veículo passa.** Módulo nativo no servidor (`servidor/combustivel/`) que coleta

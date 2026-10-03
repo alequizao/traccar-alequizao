@@ -12,18 +12,99 @@ index 2b7645f..958673f 100644
                  var service = injector.getInstance(clazz);
                  if (service != null) {
                      service.start();
+diff --git a/src/main/java/org/traccar/api/resource/BillingResource.java b/src/main/java/org/traccar/api/resource/BillingResource.java
+new file mode 100644
+index 0000000..4e94f8c
+--- /dev/null
++++ b/src/main/java/org/traccar/api/resource/BillingResource.java
+@@ -0,0 +1,74 @@
++/*
++ * Cobrança por notificação · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
++ * Licença Apache 2.0, como o Traccar.
++ */
++package org.traccar.api.resource;
++
++import jakarta.inject.Inject;
++import jakarta.ws.rs.Consumes;
++import jakarta.ws.rs.POST;
++import jakarta.ws.rs.Path;
++import jakarta.ws.rs.Produces;
++import jakarta.ws.rs.WebApplicationException;
++import jakarta.ws.rs.core.MediaType;
++import jakarta.ws.rs.core.Response;
++import org.traccar.api.BaseResource;
++import org.traccar.model.Device;
++import org.traccar.model.Event;
++import org.traccar.model.User;
++import org.traccar.session.ConnectionManager;
++import org.traccar.storage.Storage;
++import org.traccar.storage.StorageException;
++import org.traccar.storage.query.Columns;
++import org.traccar.storage.query.Condition;
++import org.traccar.storage.query.Request;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++
++@Path("billing")
++@Produces(MediaType.APPLICATION_JSON)
++@Consumes(MediaType.APPLICATION_JSON)
++public class BillingResource extends BaseResource {
++
++    public static final String TYPE_BILLING = "cobranca";
++
++    public static class Notice {
++        public long userId;
++        public String message;
++    }
++
++    @Inject
++    private Storage storage;
++
++    @Inject
++    private ConnectionManager connectionManager;
++
++    /**
++     * Sends a billing notice to one user (administrators only). It is stored as an event of type "cobranca" on one
++     * of the user's vehicles, so the user's app shows it right away if connected, or recovers it later.
++     */
++    @POST
++    @Path("notify")
++    public Map<String, Object> notify(Notice notice) throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        if (notice == null || notice.userId <= 0 || notice.message == null || notice.message.isBlank()) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++        var devices = storage.getObjects(Device.class, new Request(
++                new Columns.Include("id"), new Condition.Permission(User.class, notice.userId, Device.class)));
++        if (devices.isEmpty()) {
++            throw new WebApplicationException(Response.status(Response.Status.CONFLICT)
++                    .entity(Map.of("error", "user has no vehicle to carry the notice")).build());
++        }
++        var event = new Event(TYPE_BILLING, devices.get(0).getId());
++        event.set("userId", String.valueOf(notice.userId));
++        event.set("message", notice.message.length() > 2000 ? notice.message.substring(0, 2000) : notice.message);
++        event.setId(storage.addObject(event, new Request(new Columns.Exclude("id"))));
++        connectionManager.updateEvent(true, notice.userId, event);
++        var result = new LinkedHashMap<String, Object>();
++        result.put("eventId", event.getId());
++        return result;
++    }
++
++}
 diff --git a/src/main/java/org/traccar/api/resource/FuelResource.java b/src/main/java/org/traccar/api/resource/FuelResource.java
 new file mode 100644
-index 0000000..188e4ee
+index 0000000..19283f9
 --- /dev/null
 +++ b/src/main/java/org/traccar/api/resource/FuelResource.java
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,82 @@
 +/*
 + * Módulo de preços de combustível · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
 + * Dados: SEFAZ-AL, programa Economiza Alagoas. Licença Apache 2.0, como o Traccar.
 + */
 +package org.traccar.api.resource;
 +
++import jakarta.annotation.security.PermitAll;
 +import jakarta.inject.Inject;
 +import jakarta.ws.rs.DefaultValue;
 +import jakarta.ws.rs.GET;
@@ -49,6 +130,7 @@ index 0000000..188e4ee
 +    /**
 +     * Cheapest stations around a point, e.g. GET /api/fuel?latitude=-9.65&amp;longitude=-35.7&amp;radius=3&amp;type=1
 +     */
++    @PermitAll // public SEFAZ data, no personal information
 +    @GET
 +    public Map<String, Object> nearby(
 +            @QueryParam("latitude") Double latitude,
@@ -73,8 +155,9 @@ index 0000000..188e4ee
 +    }
 +
 +    /**
-+     * Nearest stations with every fuel price, e.g. GET /api/fuel/stations?latitude=-9.65&amp;longitude=-35.7&amp;radius=6
++     * Nearest stations with every fuel price (public, no login), e.g. GET /api/fuel/stations?latitude=-9.65&amp;longitude=-35.7&amp;radius=6
 +     */
++    @PermitAll // public SEFAZ data, no personal information; lets apps without a Traccar login (RS Cliente) use it
 +    @GET
 +    @Path("stations")
 +    public Map<String, Object> stations(
