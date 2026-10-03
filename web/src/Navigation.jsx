@@ -13,6 +13,9 @@ import fetchOrThrow from './common/util/fetchOrThrow';
 const CombinedReportPage = lazy(() => import('./reports/CombinedReportPage'));
 const PositionsReportPage = lazy(() => import('./reports/PositionsReportPage'));
 const ServerPage = lazy(() => import('./settings/ServerPage'));
+const FinancePage = lazy(() => import('./settings/FinancePage'));
+const MySubscriptionPage = lazy(() => import('./settings/MySubscriptionPage'));
+const BillingPage = lazy(() => import('./settings/BillingPage'));
 const UsersPage = lazy(() => import('./settings/UsersPage'));
 const DevicePage = lazy(() => import('./settings/DevicePage'));
 const UserPage = lazy(() => import('./settings/UserPage'));
@@ -136,6 +139,12 @@ const Navigation = () => {
           <Route path="geofences" element={<GeofencesPage />} />
           <Route path="emulator" element={<EmulatorPage />} />
           <Route path="stream" element={<StreamPage />} />
+
+          <Route path="finance">
+            <Route index element={<FinancePage />} />
+            <Route path="subscription" element={<MySubscriptionPage />} />
+            <Route path="billing" element={<BillingPage />} />
+          </Route>
 
           <Route path="settings">
             <Route path=":type/:id/share" element={<SharePage />} />

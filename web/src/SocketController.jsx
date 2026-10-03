@@ -51,9 +51,16 @@ const SocketController = () => {
   const features = useFeatures();
 
   const handleEvents = useCallback(
-    (events) => {
+    (allEvents) => {
+      // Eventos "cobranca" (pagamento confirmado, aviso de cobrança) não são alertas do veículo:
+      // avisam as telas de assinatura para atualizarem sozinhas.
+      const billing = allEvents.filter((e) => e.type === 'cobranca');
+      if (billing.length) {
+        window.dispatchEvent(new CustomEvent('billing-update', { detail: billing }));
+      }
+      const events = allEvents.filter((e) => e.type !== 'cobranca' || e.attributes.message);
       if (!features.disableEvents) {
-        dispatch(eventsActions.add(events));
+        dispatch(eventsActions.add(events.filter((e) => e.type !== 'cobranca')));
       }
       if (
         events.some(

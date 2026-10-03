@@ -1,5 +1,12 @@
 # Changelog
 
+## Financeiro — 03/10/2026
+
+- 💳 **Financeiro** no menu inferior (entre Relatórios e Configurações), ícones refeitos.
+- **Minha assinatura** (cliente): situação, link e QR do Pix, próximos vencimentos, pagamentos feitos e anexar comprovante.
+- **Cobrança** (administrador): busca por nome, filtros, Cobrar por notificação, WhatsApp, Pago, Desfazer, comprovante (apagado ao confirmar).
+- Tudo atualiza em tempo real (WebSocket), sem recarregar.
+
 ## Cobrança por notificação — 03/10/2026
 
 - `POST /api/billing/notify` (só administrador): o app RS Rastreamento envia a cobrança como notificação no celular do cliente.

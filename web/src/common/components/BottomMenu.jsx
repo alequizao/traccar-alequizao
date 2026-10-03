@@ -11,11 +11,12 @@ import {
   Badge,
 } from '@mui/material';
 
-import DescriptionIcon from '@mui/icons-material/Description';
-import SettingsIcon from '@mui/icons-material/Settings';
-import MapIcon from '@mui/icons-material/Map';
-import PersonIcon from '@mui/icons-material/Person';
-import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import DescriptionIcon from '@mui/icons-material/DescriptionRounded';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWalletRounded';
+import SettingsIcon from '@mui/icons-material/SettingsRounded';
+import MapIcon from '@mui/icons-material/MapRounded';
+import PersonIcon from '@mui/icons-material/PersonRounded';
+import ExitToAppIcon from '@mui/icons-material/ExitToAppRounded';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 
 import { sessionActions } from '../../store';
@@ -23,6 +24,9 @@ import { useTranslation } from './LocalizationProvider';
 import { useRestriction } from '../util/permissions';
 import { nativePostMessage } from './NativeInterface';
 import { getEnv } from '../util/env';
+
+// Rótulos longos (ex.: "Configurações") não cabem em 6 itens num celular de 360 px.
+const curto = (texto) => (texto.length > 11 ? `${texto.slice(0, 6)}.` : texto);
 
 const BottomMenu = () => {
   const navigate = useNavigate();
@@ -42,6 +46,9 @@ const BottomMenu = () => {
   const currentSelection = () => {
     if (location.pathname === `/settings/user/${user.id}`) {
       return 'account';
+    }
+    if (location.pathname.startsWith('/finance')) {
+      return 'finance';
     }
     if (location.pathname.startsWith('/settings')) {
       return 'settings';
@@ -113,6 +120,9 @@ const BottomMenu = () => {
         }
         break;
       }
+      case 'finance':
+        navigate('/finance');
+        break;
       case 'support':
         window.open(getEnv('SUPPORT_URL'), '_blank', 'noopener');
         break;
@@ -132,7 +142,28 @@ const BottomMenu = () => {
 
   return (
     <Paper square elevation={3}>
-      <BottomNavigation value={currentSelection()} onChange={handleSelection} showLabels>
+      <BottomNavigation
+        value={currentSelection()}
+        onChange={handleSelection}
+        showLabels
+        sx={{
+          '& .MuiBottomNavigationAction-root': {
+            minWidth: 0,
+            maxWidth: 'none',
+            flex: '1 1 0',
+            paddingLeft: '2px',
+            paddingRight: '2px',
+          },
+          '& .MuiBottomNavigationAction-label': {
+            fontSize: '0.68rem',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            '&.Mui-selected': { fontSize: '0.72rem' },
+          },
+        }}
+      >
         <BottomNavigationAction
           label={t('mapTitle')}
           icon={
@@ -149,9 +180,14 @@ const BottomMenu = () => {
             value="reports"
           />
         )}
+        <BottomNavigationAction
+          label={t('financeiroTitulo')}
+          icon={<AccountBalanceWalletIcon />}
+          value="finance"
+        />
         {!readonly && (
           <BottomNavigationAction
-            label={t('settingsTitle')}
+            label={curto(t('settingsTitle'))}
             icon={<SettingsIcon />}
             value="settings"
           />

@@ -14,10 +14,10 @@ index 2b7645f..958673f 100644
                      service.start();
 diff --git a/src/main/java/org/traccar/api/resource/BillingResource.java b/src/main/java/org/traccar/api/resource/BillingResource.java
 new file mode 100644
-index 0000000..4e94f8c
+index 0000000..7bbfb74
 --- /dev/null
 +++ b/src/main/java/org/traccar/api/resource/BillingResource.java
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,394 @@
 +/*
 + * Cobrança por notificação · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
 + * Licença Apache 2.0, como o Traccar.
@@ -26,14 +26,19 @@ index 0000000..4e94f8c
 +
 +import jakarta.inject.Inject;
 +import jakarta.ws.rs.Consumes;
++import jakarta.ws.rs.DELETE;
++import jakarta.ws.rs.GET;
++import jakarta.ws.rs.HeaderParam;
 +import jakarta.ws.rs.POST;
++import jakarta.ws.rs.PUT;
 +import jakarta.ws.rs.Path;
++import jakarta.ws.rs.PathParam;
 +import jakarta.ws.rs.Produces;
 +import jakarta.ws.rs.WebApplicationException;
 +import jakarta.ws.rs.core.MediaType;
 +import jakarta.ws.rs.core.Response;
 +import org.traccar.api.BaseResource;
-+import org.traccar.model.Device;
++import org.traccar.billing.BillingStore;
 +import org.traccar.model.Event;
 +import org.traccar.model.User;
 +import org.traccar.session.ConnectionManager;
@@ -43,13 +48,21 @@ index 0000000..4e94f8c
 +import org.traccar.storage.query.Condition;
 +import org.traccar.storage.query.Request;
 +
++import java.io.IOException;
++import java.io.InputStream;
++import java.time.LocalDate;
++import java.time.temporal.ChronoUnit;
++import java.util.ArrayList;
 +import java.util.LinkedHashMap;
++import java.util.List;
 +import java.util.Map;
 +
 +@Path("billing")
 +@Produces(MediaType.APPLICATION_JSON)
 +@Consumes(MediaType.APPLICATION_JSON)
 +public class BillingResource extends BaseResource {
++
++    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(BillingResource.class);
 +
 +    public static final String TYPE_BILLING = "cobranca";
 +
@@ -64,6 +77,199 @@ index 0000000..4e94f8c
 +    @Inject
 +    private ConnectionManager connectionManager;
 +
++    @Inject
++    private BillingStore store;
++
++    public static class AccountRequest {
++        public String dueDate;
++        public Double amount;
++        public String paidOn;
++        public String payLink;
++        public String pixCode;
++    }
++
++    public static class Settings {
++        public String payLink;
++        public String pixCode;
++    }
++
++    private static final int UPCOMING = 6;
++
++    /**
++     * Tells one customer's connected apps that their billing changed ("kind": notice, paid or update). Notices and
++     * payments are stored so an offline phone still gets them; plain updates are only delivered live.
++     * Returns false when the customer has no vehicle to carry the event.
++     */
++    private boolean push(long userId, String kind, String message, boolean keep) {
++        var event = new Event(TYPE_BILLING, 0); // live only: never written to tc_events (reports would leak it)
++        event.set("userId", String.valueOf(userId));
++        event.set("kind", kind);
++        if (message != null) {
++            String text = message.length() > 2000 ? message.substring(0, 2000) : message;
++            event.set("message", text);
++            if (keep) {
++                // an offline phone fetches it later from /billing/notices (only the owner can read them)
++                event.set("noticeId", store.addNotice(userId, kind, text));
++            }
++        }
++        connectionManager.updateEvent(true, userId, event);
++        return true;
++    }
++
++    /** A failed push must never undo or hide a billing change that was already saved. */
++    private void pushQuietly(long userId, String kind, String message, boolean keep) {
++        try {
++            push(userId, kind, message, keep);
++        } catch (Exception e) {
++            LOGGER.warn("Billing push failed", e);
++        }
++    }
++
++    /** Account as shown to its owner: status, upcoming dues (monthly) and payments received. */
++    private Map<String, Object> view(BillingStore.Account account, boolean withLink) {
++        var result = new LinkedHashMap<String, Object>();
++        var today = BillingStore.today();
++        result.put("today", today.toString());
++        if (account == null || account.dueDate == null) {
++            result.put("active", false);
++            result.put("payments", account == null ? List.of() : paymentsNewestFirst(account));
++            result.put("upcoming", List.of());
++            result.put("payLink", account != null && account.payLink != null ? account.payLink : store.payLink());
++            result.put("ownPayLink", account == null ? null : account.payLink);
++            result.put("proof", account == null ? null : account.proof);
++            result.put("pixCode", account != null && account.pixCode != null ? account.pixCode : store.pixCode());
++            result.put("ownPixCode", account == null ? null : account.pixCode);
++            return result;
++        }
++        var due = LocalDate.parse(account.dueDate);
++        long days = ChronoUnit.DAYS.between(today, due);
++        result.put("active", true);
++        result.put("dueDate", account.dueDate);
++        result.put("amount", account.amount);
++        result.put("daysToDue", days);
++        result.put("status", days < 0 ? "overdue" : days == 0 ? "dueToday" : days <= 5 ? "dueSoon" : "ok");
++        result.put("lastNotice", account.lastNotice);
++        var upcoming = new ArrayList<Map<String, Object>>();
++        for (int i = 0; i < UPCOMING; i++) {
++            var item = new LinkedHashMap<String, Object>();
++            item.put("due", BillingStore.addMonths(due, i, account.anchorDay).toString());
++            item.put("amount", account.amount);
++            upcoming.add(item);
++        }
++        result.put("upcoming", upcoming);
++        result.put("payments", paymentsNewestFirst(account));
++        result.put("payLink", account.payLink != null ? account.payLink : store.payLink());
++        result.put("ownPayLink", account.payLink);
++        result.put("proof", account.proof);
++        result.put("pixCode", account.pixCode != null ? account.pixCode : store.pixCode());
++        result.put("ownPixCode", account.pixCode);
++        return result;
++    }
++
++    private List<BillingStore.Payment> paymentsNewestFirst(BillingStore.Account account) {
++        var list = new ArrayList<>(account.payments);
++        java.util.Collections.reverse(list);
++        return list;
++    }
++
++    /** The logged user's own account (read only). */
++    @GET
++    @Path("me")
++    public Map<String, Object> me() {
++        return view(store.get(getUserId()), true);
++    }
++
++    /** Every account, for the administrator. */
++    @GET
++    @Path("accounts")
++    public Map<String, Object> accounts() throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        var result = new LinkedHashMap<String, Object>();
++        var existing = new java.util.HashSet<Long>();
++        storage.getObjects(User.class, new Request(new Columns.Include("id")))
++                .forEach(user -> existing.add(user.getId()));
++        store.purgeOrphans(existing); // deleted customers leave nothing behind
++        var list = new LinkedHashMap<String, Object>();
++        store.all().forEach((id, account) -> {
++            try {
++                list.put(id, view(account, false));
++            } catch (RuntimeException e) {
++                LOGGER.warn("Billing account {} could not be shown", id, e);
++            }
++        });
++        result.put("accounts", list);
++        result.put("payLink", store.payLink());
++        result.put("pixCode", store.pixCode());
++        return result;
++    }
++
++    @PUT
++    @Path("accounts/{userId}")
++    public Map<String, Object> configure(@PathParam("userId") long userId, AccountRequest request)
++            throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        requireUser(userId);
++        if (request == null) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++        try {
++            var account = store.configure(userId, request.dueDate, request.amount, request.payLink, request.pixCode);
++            pushQuietly(userId, "update", null, false);
++            return view(account, false);
++        } catch (java.time.DateTimeException | IllegalArgumentException | NullPointerException e) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++    }
++
++    @POST
++    @Path("accounts/{userId}/pay")
++    public Map<String, Object> pay(@PathParam("userId") long userId, AccountRequest request)
++            throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        try {
++            var account = store.pay(userId, request == null ? null : request.amount,
++                    request == null ? null : request.paidOn);
++            pushQuietly(userId, "paid", "Pagamento recebido! Obrigado."
++                    + (account.dueDate == null ? "" : " Próximo vencimento: " + account.dueDate.substring(8, 10) + "/"
++                    + account.dueDate.substring(5, 7) + "/" + account.dueDate.substring(0, 4) + "."), true);
++            return view(account, false);
++        } catch (IllegalStateException e) {
++            throw new WebApplicationException(Response.status(Response.Status.CONFLICT).build());
++        } catch (java.time.DateTimeException | IllegalArgumentException e) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++    }
++
++    @POST
++    @Path("accounts/{userId}/undo")
++    public Map<String, Object> undo(@PathParam("userId") long userId) throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        try {
++            var account = store.undo(userId);
++            pushQuietly(userId, "update", null, false);
++            return view(account, false);
++        } catch (IllegalStateException e) {
++            throw new WebApplicationException(Response.status(Response.Status.CONFLICT).build());
++        }
++    }
++
++    @PUT
++    @Path("settings")
++    public Map<String, Object> settings(Settings settings) throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        try {
++            if (settings != null && settings.payLink != null) {
++                store.setPayLink(settings.payLink);
++            }
++            if (settings != null && settings.pixCode != null) {
++                store.setPixCode(settings.pixCode);
++            }
++        } catch (IllegalArgumentException e) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++        return Map.of("payLink", store.payLink(), "pixCode", store.pixCode());
++    }
++
 +    /**
 +     * Sends a billing notice to one user (administrators only). It is stored as an event of type "cobranca" on one
 +     * of the user's vehicles, so the user's app shows it right away if connected, or recovers it later.
@@ -75,29 +281,143 @@ index 0000000..4e94f8c
 +        if (notice == null || notice.userId <= 0 || notice.message == null || notice.message.isBlank()) {
 +            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
 +        }
-+        var devices = storage.getObjects(Device.class, new Request(
-+                new Columns.Include("id"), new Condition.Permission(User.class, notice.userId, Device.class)));
-+        if (devices.isEmpty()) {
-+            throw new WebApplicationException(Response.status(Response.Status.CONFLICT)
-+                    .entity(Map.of("error", "user has no vehicle to carry the notice")).build());
++        requireUser(notice.userId);
++        push(notice.userId, "notice", notice.message, true);
++        store.noticeSent(notice.userId);
++        return new LinkedHashMap<>(Map.of("sent", true));
++    }
++
++    private void requireUser(long userId) throws StorageException {
++        if (userId <= 0 || storage.getObject(User.class, new Request(
++                new Columns.Include("id"), new Condition.Equals("id", userId))) == null) {
++            throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
 +        }
-+        var event = new Event(TYPE_BILLING, devices.get(0).getId());
-+        event.set("userId", String.valueOf(notice.userId));
-+        event.set("message", notice.message.length() > 2000 ? notice.message.substring(0, 2000) : notice.message);
-+        event.setId(storage.addObject(event, new Request(new Columns.Exclude("id"))));
-+        connectionManager.updateEvent(true, notice.userId, event);
-+        var result = new LinkedHashMap<String, Object>();
-+        result.put("eventId", event.getId());
-+        return result;
++    }
++
++    /** The logged user's own pending notices (billing messages kept up to 7 days), newest last. */
++    @GET
++    @Path("notices")
++    public Map<String, Object> notices() {
++        return Map.of("notices", store.notices(getUserId()));
++    }
++
++    private static final int MAX_PROOF = 5 * 1024 * 1024;
++
++    private static String proofType(byte[] b) {
++        if (b.length > 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
++            return "image/jpeg";
++        }
++        if (b.length > 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
++            return "image/png";
++        }
++        if (b.length > 5 && b[0] == '%' && b[1] == 'P' && b[2] == 'D' && b[3] == 'F') {
++            return "application/pdf";
++        }
++        if (b.length > 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
++                && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P') {
++            return "image/webp";
++        }
++        return null;
++    }
++
++    /** Tells every administrator's open screens that something changed (live only, nothing stored). */
++    private void pingAdmins(long fromUserId) {
++        try {
++            for (var admin : storage.getObjects(User.class, new Request(
++                    new Columns.Include("id"), new Condition.Equals("administrator", true)))) {
++                var event = new Event(TYPE_BILLING, 0);
++                event.set("userId", String.valueOf(fromUserId));
++                event.set("kind", "proof");
++                connectionManager.updateEvent(true, admin.getId(), event);
++            }
++        } catch (Exception e) {
++            LOGGER.warn("Admin ping failed", e);
++        }
++    }
++
++    /**
++     * The customer attaches the payment receipt (image or PDF up to 5 MB, raw bytes in the body). It is kept only
++     * until the administrator confirms the payment, which deletes it.
++     */
++    @POST
++    @Path("proof")
++    @Consumes(MediaType.WILDCARD)
++    public Map<String, Object> uploadProof(@HeaderParam("X-File-Name") String name, InputStream body)
++            throws IOException {
++        byte[] bytes = body.readNBytes(MAX_PROOF + 1);
++        if (bytes.length > MAX_PROOF) {
++            throw new WebApplicationException(Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build());
++        }
++        String type = proofType(bytes);
++        if (type == null) {
++            throw new WebApplicationException(Response.status(Response.Status.UNSUPPORTED_MEDIA_TYPE).build());
++        }
++        try {
++            String fileName;
++            try {
++                fileName = name == null ? null : java.net.URLDecoder.decode(
++                        name.replace("+", "%2B"), java.nio.charset.StandardCharsets.UTF_8);
++            } catch (IllegalArgumentException e) {
++                fileName = null; // malformed %-escape: fall back to a generic name
++            }
++            var account = store.saveProof(getUserId(), bytes, fileName, type);
++            pingAdmins(getUserId());
++            return view(account, true);
++        } catch (IllegalStateException e) {
++            throw new WebApplicationException(Response.status(Response.Status.CONFLICT).build());
++        }
++    }
++
++    /** The owner removes their own receipt. */
++    @DELETE
++    @Path("proof")
++    public Map<String, Object> removeOwnProof() {
++        var account = store.removeProof(getUserId());
++        pingAdmins(getUserId());
++        return view(account, true);
++    }
++
++    /** Receipt file: the administrator sees anyone's, a customer only their own. */
++    @GET
++    @Path("proof/{userId}")
++    @Produces(MediaType.WILDCARD)
++    public Response proofFile(@PathParam("userId") long userId) throws StorageException, IOException {
++        if (userId != getUserId()) {
++            permissionsService.checkAdmin(getUserId());
++        }
++        var proof = store.proof(userId);
++        byte[] bytes = store.proofBytes(userId);
++        if (proof == null || bytes == null) {
++            throw new WebApplicationException(Response.Status.NOT_FOUND);
++        }
++        boolean image = proof.type.startsWith("image/");
++        return Response.ok(bytes, proof.type)
++                .header("Cache-Control", "no-store")
++                .header("X-Content-Type-Options", "nosniff")
++                .header("Content-Security-Policy", "default-src 'none'; sandbox")
++                .header("Content-Disposition", (image ? "inline" : "attachment") + "; filename*=UTF-8''"
++                        + java.net.URLEncoder.encode(proof.name, java.nio.charset.StandardCharsets.UTF_8)
++                        .replace("+", "%20"))
++                .build();
++    }
++
++    /** The administrator rejects/removes a receipt without confirming the payment. */
++    @DELETE
++    @Path("proof/{userId}")
++    public Map<String, Object> removeProof(@PathParam("userId") long userId) throws StorageException {
++        permissionsService.checkAdmin(getUserId());
++        var account = store.removeProof(userId);
++        pushQuietly(userId, "update", null, false);
++        return view(account, false);
 +    }
 +
 +}
 diff --git a/src/main/java/org/traccar/api/resource/FuelResource.java b/src/main/java/org/traccar/api/resource/FuelResource.java
 new file mode 100644
-index 0000000..19283f9
+index 0000000..4b9de18
 --- /dev/null
 +++ b/src/main/java/org/traccar/api/resource/FuelResource.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,84 @@
 +/*
 + * Módulo de preços de combustível · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
 + * Dados: SEFAZ-AL, programa Economiza Alagoas. Licença Apache 2.0, como o Traccar.
@@ -142,12 +462,13 @@ index 0000000..19283f9
 +            throw new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
 +                    .entity(Map.of("error", "fuel prices not available yet")).build());
 +        }
-+        if (latitude == null || longitude == null || type < 1 || type > 6) {
++        if (latitude == null || longitude == null || type < 1 || type > 6 || !Double.isFinite(radius)
++                || !Double.isFinite(latitude) || !Double.isFinite(longitude)) {
 +            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
 +        }
 +        var result = new LinkedHashMap<String, Object>();
 +        result.put("type", type);
-+        result.put("radius", radius);
++        result.put("radius", Math.min(Math.max(radius, 0.1), 30));
 +        result.put("updatedAt", fuelService.getUpdatedAt().toString());
 +        result.put("stations", fuelService.nearby(latitude, longitude,
 +                Math.min(Math.max(radius, 0.1), 30), type, Math.min(Math.max(limit, 1), 50)));
@@ -169,7 +490,8 @@ index 0000000..19283f9
 +            throw new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
 +                    .entity(Map.of("error", "fuel prices not available yet")).build());
 +        }
-+        if (latitude == null || longitude == null) {
++        if (latitude == null || longitude == null || !Double.isFinite(radius)
++                || !Double.isFinite(latitude) || !Double.isFinite(longitude)) {
 +            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
 +        }
 +        var result = new LinkedHashMap<String, Object>();
@@ -177,6 +499,462 @@ index 0000000..19283f9
 +        result.put("stations", fuelService.stationsAround(latitude, longitude,
 +                Math.min(Math.max(radius, 0.1), 30), Math.min(Math.max(limit, 1), 100)));
 +        return result;
++    }
++
++}
+diff --git a/src/main/java/org/traccar/billing/BillingStore.java b/src/main/java/org/traccar/billing/BillingStore.java
+new file mode 100644
+index 0000000..bd547ba
+--- /dev/null
++++ b/src/main/java/org/traccar/billing/BillingStore.java
+@@ -0,0 +1,450 @@
++/*
++ * Cobrança dos clientes · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
++ * Licença Apache 2.0, como o Traccar.
++ */
++package org.traccar.billing;
++
++import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import jakarta.inject.Inject;
++import jakarta.inject.Singleton;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.traccar.config.Config;
++import org.traccar.config.Keys;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++import java.time.LocalDate;
++import java.time.ZoneId;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.TreeMap;
++import java.util.UUID;
++
++/**
++ * Billing data kept in a file of its own (data/billing.json), outside the user records, so that customers can
++ * read their own account but never write it: only the administrator endpoints change it.
++ */
++@Singleton
++public class BillingStore {
++
++    private static final Logger LOGGER = LoggerFactory.getLogger(BillingStore.class);
++    public static final ZoneId ZONE = ZoneId.of("America/Maceio");
++
++    @JsonIgnoreProperties(ignoreUnknown = true)
++    public static class Payment {
++        public String id;
++        public String paidOn;      // yyyy-MM-dd, day the payment was registered as received
++        public String due;         // yyyy-MM-dd, the due date it settled
++        public Double amount;
++        public String registeredAt;
++    }
++
++    @JsonIgnoreProperties(ignoreUnknown = true)
++    public static class Proof {
++        public String file;        // file name inside data/billing-proofs
++        public String name;        // name the customer gave it
++        public String type;        // image/jpeg, image/png, image/webp or application/pdf
++        public long size;
++        public String uploadedAt;  // ISO instant
++    }
++
++    @JsonIgnoreProperties(ignoreUnknown = true)
++    public static class Account {
++        public String dueDate;     // next unpaid due date (yyyy-MM-dd), null = no billing
++        public int anchorDay;      // day of the month the customer pays on (31 stays 31 after a short month)
++        public Double amount;      // monthly amount
++        public String lastNotice;  // ISO instant of the last push sent
++        public String payLink;     // payment link of this customer (falls back to the general one)
++        public String pixCode;     // Pix "copia e cola" of this customer (falls back to the general one)
++        public Proof proof;        // payment receipt sent by the customer; deleted when the payment is confirmed
++        public List<Payment> payments = new ArrayList<>();
++    }
++
++    @JsonIgnoreProperties(ignoreUnknown = true)
++    public static class Notice {
++        public String id;
++        public String kind;        // notice | paid
++        public String message;
++        public String createdAt;   // ISO instant
++    }
++
++    @JsonIgnoreProperties(ignoreUnknown = true)
++    public static class Data {
++        public Map<String, Object> settings = new TreeMap<>();
++        public Map<String, Account> accounts = new TreeMap<>();
++        public Map<String, List<Notice>> notices = new TreeMap<>();
++    }
++
++    private final ObjectMapper mapper = new ObjectMapper();
++    private final Path file;
++    private final Path proofDir;
++    private Data data = new Data();
++
++    @Inject
++    public BillingStore(Config config) {
++        this.file = Path.of(config.getString(Keys.FUEL_CACHE, "data/fuel.json"))
++                .toAbsolutePath().resolveSibling("billing.json");
++        this.proofDir = file.resolveSibling("billing-proofs");
++        load();
++    }
++
++    private boolean loadFailed;
++
++    private synchronized void load() {
++        if (!Files.exists(file)) {
++            return;
++        }
++        try {
++            data = mapper.readValue(Files.readString(file), Data.class);
++        } catch (Exception e) {
++            LOGGER.error("Billing data corrupted in {}, trying the backup", file, e);
++            try {
++                data = mapper.readValue(Files.readString(file.resolveSibling("billing.json.bak")), Data.class);
++                Files.move(file, file.resolveSibling("billing.json.corrupt-" + System.currentTimeMillis()));
++                LOGGER.warn("Billing data restored from billing.json.bak");
++            } catch (Exception second) {
++                loadFailed = true; // never overwrite what could not be read
++                LOGGER.error("Billing backup unusable too: writes are refused until fixed", second);
++            }
++        }
++    }
++
++    private void save() {
++        if (loadFailed) {
++            throw new IllegalStateException("Billing data could not be loaded; refusing to overwrite it");
++        }
++        try {
++            var temp = file.resolveSibling("billing.json.tmp");
++            Files.writeString(temp, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(data));
++            if (Files.exists(file)) {
++                Files.copy(file, file.resolveSibling("billing.json.bak"), StandardCopyOption.REPLACE_EXISTING);
++            }
++            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
++        } catch (IOException e) {
++            throw new IllegalStateException("Billing data not saved", e);
++        }
++    }
++
++    public static LocalDate today() {
++        return LocalDate.now(ZONE);
++    }
++
++    public synchronized String payLink() {
++        var link = data.settings.get("payLink");
++        return link == null ? "" : link.toString();
++    }
++
++    /** Only https links (or empty): the customer opens it with one tap, so no javascript:/intent: schemes. */
++    public static String checkLink(String link) {
++        if (link == null || link.isBlank()) {
++            return "";
++        }
++        var value = link.trim();
++        if (value.length() > 2000 || !value.regionMatches(true, 0, "https://", 0, 8)) {
++            throw new IllegalArgumentException("invalid link");
++        }
++        return value;
++    }
++
++    public static String checkPix(String code) {
++        if (code == null || code.isBlank()) {
++            return "";
++        }
++        var value = code.trim();
++        if (value.length() > 1000) {
++            throw new IllegalArgumentException("invalid pix");
++        }
++        return value;
++    }
++
++    public static Double checkAmount(Double amount) {
++        if (amount == null) {
++            return null;
++        }
++        if (!Double.isFinite(amount) || amount <= 0 || amount >= 1e7) {
++            throw new IllegalArgumentException("invalid amount");
++        }
++        return Math.round(amount * 100) / 100.0;
++    }
++
++    public static LocalDate checkDate(String date) {
++        var parsed = LocalDate.parse(date); // yyyy-MM-dd
++        if (parsed.getYear() < 2020 || parsed.getYear() > 2100) {
++            throw new IllegalArgumentException("invalid date");
++        }
++        return parsed;
++    }
++
++    public synchronized void setPayLink(String link) {
++        data.settings.put("payLink", checkLink(link));
++        save();
++    }
++
++    public synchronized String pixCode() {
++        var code = data.settings.get("pixCode");
++        return code == null ? "" : code.toString();
++    }
++
++    public synchronized void setPixCode(String code) {
++        data.settings.put("pixCode", checkPix(code));
++        save();
++    }
++
++    public synchronized Account get(long userId) {
++        return copy(data.accounts.get(String.valueOf(userId)));
++    }
++
++    public synchronized Map<String, Account> all() {
++        var result = new TreeMap<String, Account>();
++        data.accounts.forEach((k, v) -> result.put(k, copy(v)));
++        return result;
++    }
++
++    /** Sets the due date and the monthly amount (null clears them). Payments are kept. */
++    public synchronized Account configure(
++            long userId, String dueDate, Double amount, String payLink, String pixCode) {
++        String due = null;
++        if (dueDate != null && !dueDate.isEmpty()) {
++            due = checkDate(dueDate).toString();
++        }
++        Double value = checkAmount(amount);
++        String link = checkLink(payLink);
++        String pix = checkPix(pixCode);
++        var account = data.accounts.computeIfAbsent(String.valueOf(userId), k -> new Account());
++        account.dueDate = due;
++        account.anchorDay = due == null ? 0 : LocalDate.parse(due).getDayOfMonth();
++        account.amount = value;
++        account.payLink = link.isEmpty() ? null : link;
++        account.pixCode = pix.isEmpty() ? null : pix;
++        if (due == null) {
++            deleteProofFile(account);
++            account.proof = null;
++        }
++        save();
++        return copy(account);
++    }
++
++    /** Registers the current due date as paid and moves the due date one month ahead. */
++    public synchronized Account pay(long userId, Double amount, String paidOn) {
++        var account = data.accounts.get(String.valueOf(userId));
++        if (account == null || account.dueDate == null) {
++            throw new IllegalStateException("no due date");
++        }
++        var next = addMonths(LocalDate.parse(account.dueDate), 1, account.anchorDay);
++        var payment = new Payment();
++        payment.id = UUID.randomUUID().toString().substring(0, 8);
++        payment.due = account.dueDate;
++        payment.paidOn = paidOn == null || paidOn.isEmpty() ? today().toString() : checkPaidOn(paidOn);
++        payment.amount = amount != null ? checkAmount(amount) : account.amount;
++        payment.registeredAt = java.time.Instant.now().toString();
++        account.payments.add(payment);
++        account.dueDate = next.toString();
++        deleteProofFile(account); // receipt confirmed: the proof is no longer needed
++        account.proof = null;
++        save();
++        return copy(account);
++    }
++
++    /** Undoes the last payment: it is removed and the due date goes back to the one it had settled. */
++    public synchronized Account undo(long userId) {
++        var account = data.accounts.get(String.valueOf(userId));
++        if (account == null || account.payments.isEmpty()) {
++            throw new IllegalStateException("no payment");
++        }
++        var last = account.payments.get(account.payments.size() - 1);
++        var expected = addMonths(LocalDate.parse(last.due), 1, account.anchorDay).toString();
++        if (account.dueDate != null && !account.dueDate.equals(expected)) {
++            throw new IllegalStateException("due date was changed after the payment");
++        }
++        account.payments.remove(account.payments.size() - 1);
++        account.dueDate = last.due;
++        save();
++        return copy(account);
++    }
++
++    private void deleteProofFile(Account account) {
++        if (account.proof != null && account.proof.file != null) {
++            try {
++                Files.deleteIfExists(proofDir.resolve(account.proof.file));
++            } catch (IOException e) {
++                LOGGER.warn("Proof file not deleted (will be swept as an orphan): {}", account.proof.file, e);
++            }
++        }
++    }
++
++    /**
++     * Removes the accounts of users that no longer exist and any receipt file nobody refers to (LGPD: nothing is
++     * kept for deleted customers).
++     */
++    public synchronized void purgeOrphans(java.util.Set<Long> existingUserIds) {
++        boolean changed = false;
++        var it = data.accounts.entrySet().iterator();
++        while (it.hasNext()) {
++            var entry = it.next();
++            boolean gone;
++            try {
++                gone = !existingUserIds.contains(Long.parseLong(entry.getKey()));
++            } catch (NumberFormatException e) {
++                gone = true;
++            }
++            if (gone) {
++                deleteProofFile(entry.getValue());
++                it.remove();
++                changed = true;
++            }
++        }
++        if (data.notices.keySet().removeIf(k -> !data.accounts.containsKey(k))) {
++            changed = true;
++        }
++        try {
++            if (Files.isDirectory(proofDir)) {
++                var referenced = new java.util.HashSet<String>();
++                data.accounts.values().forEach(a -> {
++                    if (a.proof != null) {
++                        referenced.add(a.proof.file);
++                    }
++                });
++                try (var files = Files.list(proofDir)) {
++                    for (var path : (Iterable<Path>) files::iterator) {
++                        if (!referenced.contains(path.getFileName().toString())) {
++                            Files.deleteIfExists(path);
++                        }
++                    }
++                }
++            }
++        } catch (IOException e) {
++            LOGGER.warn("Orphan receipts sweep failed", e);
++        }
++        if (changed) {
++            save();
++        }
++    }
++
++    // --- notices: stored here (only their owner can read them), never in tc_events -----------------------
++
++    /** Keeps a notice for 7 days so a phone that was offline still gets it. Returns its id. */
++    public synchronized String addNotice(long userId, String kind, String message) {
++        var list = data.notices.computeIfAbsent(String.valueOf(userId), k -> new ArrayList<>());
++        var cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(7));
++        list.removeIf(n -> java.time.Instant.parse(n.createdAt).isBefore(cutoff));
++        var notice = new Notice();
++        notice.id = UUID.randomUUID().toString().substring(0, 12);
++        notice.kind = kind;
++        notice.message = message;
++        notice.createdAt = java.time.Instant.now().toString();
++        list.add(notice);
++        while (list.size() > 30) {
++            list.remove(0);
++        }
++        save();
++        return notice.id;
++    }
++
++    public synchronized List<Notice> notices(long userId) {
++        var list = data.notices.get(String.valueOf(userId));
++        if (list == null) {
++            return List.of();
++        }
++        var cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(7));
++        var result = new ArrayList<Notice>();
++        for (var n : list) {
++            if (!java.time.Instant.parse(n.createdAt).isBefore(cutoff)) {
++                result.add(n);
++            }
++        }
++        return result;
++    }
++
++    /** Stores the receipt (replacing a previous one). The account must already exist with a due date. */
++    public synchronized Account saveProof(long userId, byte[] bytes, String name, String type) throws IOException {
++        var account = data.accounts.get(String.valueOf(userId));
++        if (account == null || account.dueDate == null) {
++            throw new IllegalStateException("no billing");
++        }
++        Files.createDirectories(proofDir);
++        deleteProofFile(account);
++        var proof = new Proof();
++        String ext = type.equals("application/pdf") ? "pdf" : type.equals("image/png") ? "png"
++                : type.equals("image/webp") ? "webp" : "jpg";
++        proof.file = userId + "-" + System.currentTimeMillis() + "." + ext;
++        String clean = name == null ? "" : name.replaceAll("[^\\p{L}\\p{N} ._-]", "_").trim();
++        proof.name = clean.isEmpty() ? "comprovante." + ext : clean.substring(0, Math.min(clean.length(), 80));
++        proof.type = type;
++        proof.size = bytes.length;
++        proof.uploadedAt = java.time.Instant.now().toString();
++        Files.write(proofDir.resolve(proof.file), bytes);
++        account.proof = proof;
++        save();
++        return copy(account);
++    }
++
++    public synchronized Proof proof(long userId) {
++        var account = data.accounts.get(String.valueOf(userId));
++        return account == null ? null : account.proof;
++    }
++
++    public synchronized byte[] proofBytes(long userId) throws IOException {
++        var proof = proof(userId);
++        if (proof == null) {
++            return null;
++        }
++        var path = proofDir.resolve(proof.file);
++        return Files.exists(path) ? Files.readAllBytes(path) : null;
++    }
++
++    public synchronized Account removeProof(long userId) {
++        var account = data.accounts.get(String.valueOf(userId));
++        if (account == null) {
++            return null;
++        }
++        deleteProofFile(account);
++        account.proof = null;
++        save();
++        return copy(account);
++    }
++
++    public synchronized void noticeSent(long userId) {
++        var account = data.accounts.get(String.valueOf(userId));
++        if (account != null) {
++            account.lastNotice = java.time.Instant.now().toString();
++            save();
++        }
++    }
++
++    /** The day the customer pays on is kept: 31/01 -> 28/02 -> 31/03 (not 28/03). anchorDay 0 = use the date's day. */
++    public static LocalDate addMonths(LocalDate date, int months, int anchorDay) {
++        var month = java.time.YearMonth.from(date).plusMonths(months);
++        int day = anchorDay > 0 ? anchorDay : date.getDayOfMonth();
++        return month.atDay(Math.min(day, month.lengthOfMonth()));
++    }
++
++    private static String checkPaidOn(String paidOn) {
++        var date = LocalDate.parse(paidOn);
++        if (date.getYear() < 2020 || date.isAfter(today().plusDays(1))) {
++            throw new IllegalArgumentException("invalid paidOn");
++        }
++        return date.toString();
++    }
++
++    private Account copy(Account source) {
++        if (source == null) {
++            return null;
++        }
++        var copy = new Account();
++        copy.dueDate = source.dueDate;
++        copy.amount = source.amount;
++        copy.lastNotice = source.lastNotice;
++        copy.payLink = source.payLink;
++        copy.anchorDay = source.anchorDay;
++        copy.pixCode = source.pixCode;
++        copy.proof = source.proof;
++        copy.payments = new ArrayList<>(source.payments);
++        return copy;
 +    }
 +
 +}

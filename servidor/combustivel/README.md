@@ -34,3 +34,14 @@ Postos com coordenada 0,0 são ignorados no "perto de mim".
 `cobranca` (com `userId` e `message` em `attributes`) em um veículo do cliente e o entrega pelo WebSocket do cliente.
 Se o celular estiver sem internet, o app recupera o aviso depois (relatório de eventos, até 7 dias).
 Responde 409 se o cliente não tem veículo vinculado.
+
+## Cobrança dos clientes e comprovantes (`/api/billing`)
+Dados em `data/billing.json` (+ `.bak`, com recuperação automática se o arquivo corromper) e comprovantes em
+`data/billing-proofs/` — fora do cadastro do usuário: **o cliente só lê a própria conta; só o administrador altera**.
+- Cliente: `GET /billing/me`, `GET /billing/notices` (avisos dos últimos 7 dias), `POST /billing/proof` (corpo cru,
+  imagem ou PDF até 5 MB, validado pelos primeiros bytes), `DELETE /billing/proof`, `GET /billing/proof/{id}` (só o dono).
+- Administrador: `GET /billing/accounts`, `PUT /billing/accounts/{id}`, `POST /billing/accounts/{id}/pay` (avança um mês,
+  mantém o dia combinado e **apaga o comprovante**), `POST .../undo`, `PUT /billing/settings` (link e Pix padrão),
+  `POST /billing/notify`, `DELETE /billing/proof/{id}`.
+- Tempo real: o servidor entrega um evento `cobranca` só ao WebSocket do dono (nada é gravado em `tc_events`, então
+  não aparece em relatórios de quem divide o veículo). Links de pagamento só `https://`.

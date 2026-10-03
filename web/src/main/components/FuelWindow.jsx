@@ -40,7 +40,7 @@ const useStyles = makeStyles()((theme) => ({
     right: theme.spacing(8),
     top: theme.spacing(7),
     zIndex: 5,
-    width: 'min(340px, 92vw)',
+    width: 'min(340px, calc(100vw - 72px))',
     maxHeight: 'max(190px, calc(100vh - 560px))',
     display: 'flex',
     flexDirection: 'column',
@@ -48,7 +48,8 @@ const useStyles = makeStyles()((theme) => ({
     borderRadius: 12,
     [theme.breakpoints.down('md')]: {
       top: theme.spacing(14),
-      maxHeight: 'max(150px, calc(100vh - 650px))',
+      // deixa espaço para o popup do veículo (até ~500 px) não ficar por cima da lista
+      maxHeight: 'max(88px, calc(100dvh - 612px))',
     },
   },
   barra: {
