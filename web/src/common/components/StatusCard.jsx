@@ -36,6 +36,8 @@ import { devicesActions } from '../../store';
 import { useCatch, useCatchCallback } from '../../reactHelper';
 import { useAttributePreference } from '../util/preferences';
 import fetchOrThrow from '../util/fetchOrThrow';
+import useFuel from '../util/useFuel';
+import FuelPrices from './FuelPrices';
 
 const useStyles = makeStyles()((theme, { desktopPadding }) => ({
   card: {
@@ -117,6 +119,7 @@ const StatusRow = ({ name, content }) => {
 };
 
 const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPadding = 0 }) => {
+  const fuel = useFuel(position);
   const { classes } = useStyles({ desktopPadding });
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -218,6 +221,12 @@ const StatusCard = ({ deviceId, position, onClose, disableActions, desktopPaddin
                             }
                           />
                         ))}
+                      {fuel.nearest && (
+                        <StatusRow
+                          name="Combustível"
+                          content={<FuelPrices station={fuel.nearest} from={position} />}
+                        />
+                      )}
                     </TableBody>
                     <TableFooter>
                       <TableRow>

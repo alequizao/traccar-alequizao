@@ -1,0 +1,524 @@
+diff --git a/src/main/java/org/traccar/Main.java b/src/main/java/org/traccar/Main.java
+index 2b7645f..958673f 100644
+--- a/src/main/java/org/traccar/Main.java
++++ b/src/main/java/org/traccar/Main.java
+@@ -120,7 +120,8 @@ public final class Main {
+ 
+             var services = new ArrayList<LifecycleObject>();
+             for (var clazz : List.of(
+-                    ScheduleManager.class, ServerManager.class, WebServer.class, BroadcastService.class)) {
++                    ScheduleManager.class, ServerManager.class, WebServer.class, BroadcastService.class,
++                    org.traccar.fuel.FuelService.class)) {
+                 var service = injector.getInstance(clazz);
+                 if (service != null) {
+                     service.start();
+diff --git a/src/main/java/org/traccar/api/resource/FuelResource.java b/src/main/java/org/traccar/api/resource/FuelResource.java
+new file mode 100644
+index 0000000..188e4ee
+--- /dev/null
++++ b/src/main/java/org/traccar/api/resource/FuelResource.java
+@@ -0,0 +1,79 @@
++/*
++ * Módulo de preços de combustível · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
++ * Dados: SEFAZ-AL, programa Economiza Alagoas. Licença Apache 2.0, como o Traccar.
++ */
++package org.traccar.api.resource;
++
++import jakarta.inject.Inject;
++import jakarta.ws.rs.DefaultValue;
++import jakarta.ws.rs.GET;
++import jakarta.ws.rs.Path;
++import jakarta.ws.rs.Produces;
++import jakarta.ws.rs.QueryParam;
++import jakarta.ws.rs.WebApplicationException;
++import jakarta.ws.rs.core.MediaType;
++import jakarta.ws.rs.core.Response;
++import org.traccar.api.BaseResource;
++import org.traccar.fuel.FuelService;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++
++@Path("fuel")
++@Produces(MediaType.APPLICATION_JSON)
++public class FuelResource extends BaseResource {
++
++    @Inject
++    private FuelService fuelService;
++
++    /**
++     * Cheapest stations around a point, e.g. GET /api/fuel?latitude=-9.65&amp;longitude=-35.7&amp;radius=3&amp;type=1
++     */
++    @GET
++    public Map<String, Object> nearby(
++            @QueryParam("latitude") Double latitude,
++            @QueryParam("longitude") Double longitude,
++            @QueryParam("radius") @DefaultValue("5") double radius,
++            @QueryParam("type") @DefaultValue("1") int type,
++            @QueryParam("limit") @DefaultValue("5") int limit) {
++        if (!fuelService.isEnabled() || fuelService.getUpdatedAt() == null) {
++            throw new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
++                    .entity(Map.of("error", "fuel prices not available yet")).build());
++        }
++        if (latitude == null || longitude == null || type < 1 || type > 6) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++        var result = new LinkedHashMap<String, Object>();
++        result.put("type", type);
++        result.put("radius", radius);
++        result.put("updatedAt", fuelService.getUpdatedAt().toString());
++        result.put("stations", fuelService.nearby(latitude, longitude,
++                Math.min(Math.max(radius, 0.1), 30), type, Math.min(Math.max(limit, 1), 50)));
++        return result;
++    }
++
++    /**
++     * Nearest stations with every fuel price, e.g. GET /api/fuel/stations?latitude=-9.65&amp;longitude=-35.7&amp;radius=6
++     */
++    @GET
++    @Path("stations")
++    public Map<String, Object> stations(
++            @QueryParam("latitude") Double latitude,
++            @QueryParam("longitude") Double longitude,
++            @QueryParam("radius") @DefaultValue("6") double radius,
++            @QueryParam("limit") @DefaultValue("40") int limit) {
++        if (!fuelService.isEnabled() || fuelService.getUpdatedAt() == null) {
++            throw new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
++                    .entity(Map.of("error", "fuel prices not available yet")).build());
++        }
++        if (latitude == null || longitude == null) {
++            throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
++        }
++        var result = new LinkedHashMap<String, Object>();
++        result.put("updatedAt", fuelService.getUpdatedAt().toString());
++        result.put("stations", fuelService.stationsAround(latitude, longitude,
++                Math.min(Math.max(radius, 0.1), 30), Math.min(Math.max(limit, 1), 100)));
++        return result;
++    }
++
++}
+diff --git a/src/main/java/org/traccar/config/Keys.java b/src/main/java/org/traccar/config/Keys.java
+index e56bf85..d498e64 100644
+--- a/src/main/java/org/traccar/config/Keys.java
++++ b/src/main/java/org/traccar/config/Keys.java
+@@ -2343,4 +2343,53 @@ public final class Keys {
+             "broadcast.secondary",
+             List.of(KeyType.CONFIG));
+ 
++    /**
++     * Enable the fuel price module (collects prices from SEFAZ-AL Economiza Alagoas and serves them at /api/fuel).
++     */
++    public static final ConfigKey<Boolean> FUEL_ENABLE = new BooleanConfigKey(
++            "fuel.enable",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * AppToken of the Economiza Alagoas API (SEFAZ-AL).
++     */
++    public static final ConfigKey<String> FUEL_TOKEN = new StringConfigKey(
++            "fuel.token",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * Economiza Alagoas API base URL. Defaults to the public SEFAZ-AL endpoint.
++     */
++    public static final ConfigKey<String> FUEL_URL = new StringConfigKey(
++            "fuel.url",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * Center latitude of the collection area. Defaults to Maceió.
++     */
++    public static final ConfigKey<Double> FUEL_LATITUDE = new DoubleConfigKey(
++            "fuel.latitude",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * Center longitude of the collection area. Defaults to Maceió.
++     */
++    public static final ConfigKey<Double> FUEL_LONGITUDE = new DoubleConfigKey(
++            "fuel.longitude",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * Refresh interval in minutes. Defaults to 60.
++     */
++    public static final ConfigKey<Integer> FUEL_INTERVAL = new IntegerConfigKey(
++            "fuel.interval",
++            List.of(KeyType.CONFIG));
++
++    /**
++     * File where the last collection is kept, so the data survives restarts. Defaults to data/fuel.json.
++     */
++    public static final ConfigKey<String> FUEL_CACHE = new StringConfigKey(
++            "fuel.cache",
++            List.of(KeyType.CONFIG));
++
+ }
+diff --git a/src/main/java/org/traccar/fuel/FuelService.java b/src/main/java/org/traccar/fuel/FuelService.java
+new file mode 100644
+index 0000000..116a7a9
+--- /dev/null
++++ b/src/main/java/org/traccar/fuel/FuelService.java
+@@ -0,0 +1,338 @@
++/*
++ * Módulo de preços de combustível · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
++ * Dados: SEFAZ-AL, programa Economiza Alagoas. Licença Apache 2.0, como o Traccar.
++ */
++package org.traccar.fuel;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import jakarta.inject.Inject;
++import jakarta.inject.Singleton;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.traccar.LifecycleObject;
++import org.traccar.config.Config;
++import org.traccar.config.Keys;
++import org.traccar.helper.DistanceCalculator;
++
++import java.net.URI;
++import java.net.http.HttpClient;
++import java.net.http.HttpRequest;
++import java.net.http.HttpResponse;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.time.Duration;
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.Executors;
++import java.util.concurrent.ScheduledExecutorService;
++import java.util.concurrent.TimeUnit;
++
++/**
++ * Collects fuel prices from SEFAZ-AL (Economiza Alagoas) and keeps them in memory.
++ * Types follow SEFAZ codes: 1 gasolina comum, 2 aditivada, 3 etanol, 4 diesel, 5 diesel aditivado, 6 GNV.
++ */
++@Singleton
++public class FuelService implements LifecycleObject {
++
++    private static final Logger LOGGER = LoggerFactory.getLogger(FuelService.class);
++
++    private static final String DEFAULT_URL =
++            "http://api.sefaz.al.gov.br/sfz-economiza-alagoas-api/api/public/combustivel/pesquisa";
++    private static final int[] TYPES = {1, 2, 3, 4, 5, 6};
++
++    private final Config config;
++    private final ObjectMapper mapper = new ObjectMapper();
++    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
++
++    private final boolean enabled;
++    private ScheduledExecutorService executor;
++
++    private volatile Map<Integer, List<Station>> prices = Map.of();
++    private volatile Instant updatedAt;
++    private volatile String lastError;
++
++    @Inject
++    public FuelService(Config config) {
++        this.config = config;
++        this.enabled = config.getBoolean(Keys.FUEL_ENABLE);
++    }
++
++    public boolean isEnabled() {
++        return enabled;
++    }
++
++    public Instant getUpdatedAt() {
++        return updatedAt;
++    }
++
++    public String getLastError() {
++        return lastError;
++    }
++
++    public int countStations(int type) {
++        return prices.getOrDefault(type, List.of()).size();
++    }
++
++    @Override
++    public void start() {
++        if (!enabled) {
++            return;
++        }
++        if (config.getString(Keys.FUEL_TOKEN) == null) {
++            LOGGER.warn("Fuel module enabled but fuel.token is not set");
++            return;
++        }
++        loadCache();
++        int minutes = config.getInteger(Keys.FUEL_INTERVAL, 60);
++        executor = Executors.newSingleThreadScheduledExecutor(r -> {
++            var thread = new Thread(r, "fuel-collector");
++            thread.setDaemon(true);
++            return thread;
++        });
++        long initial = updatedAt != null
++                && Duration.between(updatedAt, Instant.now()).toMinutes() < minutes ? minutes : 0;
++        executor.scheduleWithFixedDelay(this::collectSafely, initial, minutes, TimeUnit.MINUTES);
++    }
++
++    @Override
++    public void stop() {
++        if (executor != null) {
++            executor.shutdownNow();
++            executor = null;
++        }
++    }
++
++    /**
++     * Cheapest stations around a point. Stations without coordinates are not listed.
++     */
++    public List<Map<String, Object>> nearby(double lat, double lon, double radiusKm, int type, int limit) {
++        var result = new ArrayList<Map<String, Object>>();
++        for (var station : prices.getOrDefault(type, List.of())) {
++            if (station.latitude() == null || station.longitude() == null) {
++                continue;
++            }
++            double km = DistanceCalculator.distance(lat, lon, station.latitude(), station.longitude()) / 1000;
++            if (km <= radiusKm) {
++                var item = new LinkedHashMap<String, Object>();
++                item.put("cnpj", station.cnpj());
++                item.put("name", station.name());
++                item.put("address", station.address());
++                item.put("neighborhood", station.neighborhood());
++                item.put("city", station.city());
++                item.put("price", station.price());
++                item.put("latitude", station.latitude());
++                item.put("longitude", station.longitude());
++                item.put("distance", Math.round(km * 100) / 100.0);
++                item.put("soldAt", station.soldAt());
++                result.add(item);
++            }
++        }
++        result.sort(Comparator.comparingDouble((Map<String, Object> m) -> (double) m.get("price"))
++                .thenComparingDouble(m -> (double) m.get("distance")));
++        return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
++    }
++
++    /**
++     * Stations around a point, nearest first, each one with the prices of every fuel it sells (by type code).
++     */
++    public List<Map<String, Object>> stationsAround(double lat, double lon, double radiusKm, int limit) {
++        var byCnpj = new LinkedHashMap<String, Map<String, Object>>();
++        for (var entry : prices.entrySet()) {
++            for (var station : entry.getValue()) {
++                if (station.latitude() == null || station.longitude() == null) {
++                    continue;
++                }
++                double km = DistanceCalculator.distance(lat, lon, station.latitude(), station.longitude()) / 1000;
++                if (km > radiusKm) {
++                    continue;
++                }
++                var item = byCnpj.computeIfAbsent(station.cnpj(), k -> {
++                    var m = new LinkedHashMap<String, Object>();
++                    m.put("cnpj", station.cnpj());
++                    m.put("name", station.name());
++                    m.put("address", station.address());
++                    m.put("neighborhood", station.neighborhood());
++                    m.put("city", station.city());
++                    m.put("latitude", station.latitude());
++                    m.put("longitude", station.longitude());
++                    m.put("distance", Math.round(km * 100) / 100.0);
++                    m.put("prices", new java.util.TreeMap<Integer, Double>());
++                    return m;
++                });
++                @SuppressWarnings("unchecked")
++                var map = (Map<Integer, Double>) item.get("prices");
++                map.put(entry.getKey(), station.price());
++            }
++        }
++        var result = new ArrayList<>(byCnpj.values());
++        result.sort(Comparator.comparingDouble(m -> (double) m.get("distance")));
++        return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
++    }
++
++    private void collectSafely() {
++        try {
++            collect();
++            lastError = null;
++        } catch (Exception e) {
++            lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
++            LOGGER.warn("Fuel collection failed", e);
++        }
++    }
++
++    private void collect() throws Exception {
++        double lat = doubleOr(Keys.FUEL_LATITUDE, -9.6498);
++        double lon = doubleOr(Keys.FUEL_LONGITUDE, -35.7089);
++        var fresh = new LinkedHashMap<Integer, List<Station>>();
++
++        for (int type : TYPES) {
++            var base = Map.<String, Object>of(
++                    "produto", Map.of("tipoCombustivel", type),
++                    "dias", 3,
++                    "pagina", 1,
++                    "registrosPorPagina", 5000);
++
++            // The API limits geolocation to a 15 km radius, so the main cities found are queried by IBGE code too.
++            var byGeo = query(base, Map.of("geolocalizacao",
++                    Map.of("latitude", lat, "longitude", lon, "raio", 15)));
++            if (byGeo == null) {
++                continue;
++            }
++            var merged = new LinkedHashMap<String, JsonNode>();
++            var cities = new LinkedHashMap<Long, Integer>();
++            for (var item : byGeo) {
++                String cnpj = item.path("estabelecimento").path("cnpj").asText("");
++                if (!cnpj.isEmpty()) {
++                    merged.put(cnpj, item);
++                }
++                long ibge = item.path("estabelecimento").path("endereco").path("codigoIBGE").asLong(0);
++                if (ibge != 0) {
++                    cities.merge(ibge, 1, Integer::sum);
++                }
++            }
++            cities.entrySet().stream()
++                    .sorted(Map.Entry.<Long, Integer>comparingByValue().reversed())
++                    .limit(2)
++                    .forEach(city -> {
++                        try {
++                            var extra = query(base, Map.of("municipio", Map.of("codigoIBGE", city.getKey())));
++                            if (extra != null) {
++                                for (var item : extra) {
++                                    String cnpj = item.path("estabelecimento").path("cnpj").asText("");
++                                    if (!cnpj.isEmpty()) {
++                                        merged.putIfAbsent(cnpj, item);
++                                    }
++                                }
++                            }
++                        } catch (Exception e) {
++                            LOGGER.warn("Fuel city query failed", e);
++                        }
++                    });
++
++            var stations = new ArrayList<Station>();
++            for (var item : merged.values()) {
++                var station = parse(item);
++                if (station != null) {
++                    stations.add(station);
++                }
++            }
++            fresh.put(type, List.copyOf(stations));
++        }
++
++        if (fresh.isEmpty()) {
++            throw new IllegalStateException("no data returned by SEFAZ");
++        }
++        // keep the previous data of types that failed this round
++        var all = new LinkedHashMap<>(prices);
++        all.putAll(fresh);
++        prices = Map.copyOf(all);
++        updatedAt = Instant.now();
++        saveCache();
++        LOGGER.info("Fuel prices updated: {} types, {} gasoline stations",
++                fresh.size(), prices.getOrDefault(1, List.of()).size());
++    }
++
++    private double doubleOr(org.traccar.config.ConfigKey<Double> key, double fallback) {
++        return config.hasKey(key) ? config.getDouble(key) : fallback;
++    }
++
++    private JsonNode query(Map<String, Object> base, Map<String, Object> establishment) throws Exception {
++        var body = new LinkedHashMap<>(base);
++        body.put("estabelecimento", establishment);
++        var request = HttpRequest.newBuilder(URI.create(config.getString(Keys.FUEL_URL, DEFAULT_URL)))
++                .timeout(Duration.ofSeconds(120))
++                .header("Content-Type", "application/json")
++                .header("AppToken", config.getString(Keys.FUEL_TOKEN))
++                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
++                .build();
++        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
++        if (response.statusCode() != 200) {
++            LOGGER.warn("SEFAZ answered HTTP {}", response.statusCode());
++            return null;
++        }
++        var content = mapper.readTree(response.body()).path("conteudo");
++        return content.isArray() ? content : null;
++    }
++
++    private Station parse(JsonNode item) {
++        var sale = item.path("produto").path("venda");
++        double price = sale.path("valorDeclarado").asDouble(0);
++        if (price <= 0 || sale.path("dataVenda").isMissingNode()) {
++            return null;
++        }
++        var e = item.path("estabelecimento");
++        var a = e.path("endereco");
++        double lat = a.path("latitude").asDouble(0);
++        double lon = a.path("longitude").asDouble(0);
++        boolean located = lat != 0 && lon != 0; // SEFAZ sends 0,0 when the station has no location
++        String name = e.path("nomeFantasia").asText("");
++        if (name.isBlank()) {
++            name = e.path("razaoSocial").asText("");
++        }
++        String address = (a.path("nomeLogradouro").asText("") + ", " + a.path("numeroImovel").asText("")).trim();
++        return new Station(
++                e.path("cnpj").asText(), name, address, a.path("bairro").asText(""), a.path("municipio").asText(""),
++                price, located ? lat : null, located ? lon : null, sale.path("dataVenda").asText(""));
++    }
++
++    private Path cachePath() {
++        return Path.of(config.getString(Keys.FUEL_CACHE, "data/fuel.json"));
++    }
++
++    private void saveCache() {
++        try {
++            var root = new LinkedHashMap<String, Object>();
++            root.put("updatedAt", updatedAt.toString());
++            root.put("prices", prices);
++            Files.writeString(cachePath(), mapper.writeValueAsString(root));
++        } catch (Exception e) {
++            LOGGER.warn("Fuel cache not saved", e);
++        }
++    }
++
++    private void loadCache() {
++        try {
++            if (!Files.exists(cachePath())) {
++                return;
++            }
++            var root = mapper.readTree(Files.readString(cachePath()));
++            var loaded = new LinkedHashMap<Integer, List<Station>>();
++            root.path("prices").fields().forEachRemaining(entry -> {
++                var list = new ArrayList<Station>();
++                for (var n : entry.getValue()) {
++                    list.add(mapper.convertValue(n, Station.class));
++                }
++                loaded.put(Integer.parseInt(entry.getKey()), List.copyOf(list));
++            });
++            prices = Map.copyOf(loaded);
++            updatedAt = Instant.parse(root.path("updatedAt").asText());
++        } catch (Exception e) {
++            LOGGER.warn("Fuel cache not loaded", e);
++        }
++    }
++
++}
+diff --git a/src/main/java/org/traccar/fuel/Station.java b/src/main/java/org/traccar/fuel/Station.java
+new file mode 100644
+index 0000000..c9b4295
+--- /dev/null
++++ b/src/main/java/org/traccar/fuel/Station.java
+@@ -0,0 +1,17 @@
++/*
++ * Módulo de preços de combustível · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
++ * Dados: SEFAZ-AL, programa Economiza Alagoas. Licença Apache 2.0, como o Traccar.
++ */
++package org.traccar.fuel;
++
++public record Station(
++        String cnpj,
++        String name,
++        String address,
++        String neighborhood,
++        String city,
++        double price,
++        Double latitude,
++        Double longitude,
++        String soldAt) {
++}

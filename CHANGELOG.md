@@ -1,5 +1,14 @@
 # Changelog
 
+## Combustível — 03/10/2026
+
+- ⛽ **Preço dos combustíveis por onde o veículo passa.** Módulo nativo no servidor (`servidor/combustivel/`) que coleta
+  na SEFAZ-AL e serve `GET /api/fuel/stations`.
+- No **popup do veículo**: posto mais próximo (nome clicável, abre a rota), preços de gasolina, etanol, diesel e GNV, distância.
+- Botão **Combustível** no mapa: lista dos mais baratos num raio de 3 km e marcadores com o preço (o mais barato em verde).
+- Atualização estilo ajax: só consulta o servidor se o veículo andou mais de 1,5 km ou passaram 10 min; entre uma
+  consulta e outra as distâncias são recalculadas no navegador.
+
 ## v6.16.0 — 29/09/2026
 
 Primeira versão pública, baseada no **Traccar 6.16.0 oficial** (servidor e web).

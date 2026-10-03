@@ -19,6 +19,8 @@ import MapScale from '../map/MapScale';
 import MapRuler from '../map/control/MapRuler';
 import MapNotification from '../map/control/MapNotification';
 import StreetViewWindow from './components/StreetViewWindow';
+import FuelWindow from './components/FuelWindow';
+import MapFuel from '../map/main/MapFuel';
 import useFeatures from '../common/util/useFeatures';
 
 const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
@@ -36,6 +38,7 @@ const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
   const features = useFeatures();
 
   const [rulerActive, setRulerActive] = useState(false);
+  const [fuelStations, setFuelStations] = useState([]);
 
   const onMarkerClick = useCallback(
     (_, deviceId) => {
@@ -61,6 +64,7 @@ const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
         />
         <MapDefaultCamera filteredPositions={filteredPositions} />
         <MapSelectedDevice />
+        <MapFuel stations={fuelStations} />
         <MapRuler positions={filteredPositions} onActiveChange={setRulerActive} />
         {!features.disableEvents && (
           <MapNotification enabled={eventsAvailable} onClick={onEventsClick} />
@@ -70,6 +74,7 @@ const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
       <MapCurrentLocation />
       <MapGeocoder />
       <StreetViewWindow position={selectedPosition} nome={nome} />
+      <FuelWindow position={selectedPosition} onStations={setFuelStations} />
       {desktop && (
         <MapPadding
           start={
