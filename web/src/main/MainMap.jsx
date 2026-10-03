@@ -18,6 +18,7 @@ import MapGeocoder from '../map/control/MapGeocoder';
 import MapScale from '../map/MapScale';
 import MapRuler from '../map/control/MapRuler';
 import MapNotification from '../map/control/MapNotification';
+import StreetViewWindow from './components/StreetViewWindow';
 import useFeatures from '../common/util/useFeatures';
 
 const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
@@ -27,6 +28,10 @@ const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
   const desktop = useMediaQuery(theme.breakpoints.up('md'));
 
   const eventsAvailable = useSelector((state) => !!state.events.items.length);
+
+  const nome = useSelector((state) =>
+    selectedPosition ? state.devices.items[selectedPosition.deviceId]?.name : null,
+  );
 
   const features = useFeatures();
 
@@ -64,6 +69,7 @@ const MainMap = ({ filteredPositions, selectedPosition, onEventsClick }) => {
       <MapScale />
       <MapCurrentLocation />
       <MapGeocoder />
+      <StreetViewWindow position={selectedPosition} nome={nome} />
       {desktop && (
         <MapPadding
           start={
